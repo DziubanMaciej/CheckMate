@@ -93,6 +93,13 @@ fn watch_command(
 ) -> Result<(), std::io::Error> {
     loop {
         let command_output = execute_command(command, command_args);
+        let command_output = command_output
+            .lines()
+            .filter(|line| { !line.trim().is_empty()})
+            .take(1)
+            .next()
+            .unwrap_or("")
+            .to_string();
         let server_command = if command_output.is_empty() {
             ServerCommand::SetStatusOk
         } else {

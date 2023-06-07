@@ -39,36 +39,38 @@ impl std::fmt::Display for CommandLineError {
 impl Config {
     pub(crate) const DEFAULT_PORT: u16 = 10005; // TODO move to common
 
-    pub fn parse<T: Iterator<Item = String>>(mut args: T) -> Result<Config, CommandLineError> {
-        let fetch_arg =
-            |args: &mut T, on_error: CommandLineError| -> Result<String, CommandLineError> {
-                match args.next() {
-                    Some(x) => Ok(x),
-                    None => return Err(on_error),
-                }
-            };
+    fn fetch_arg<T: Iterator<Item = String>>(
+        args: &mut T,
+        on_error: CommandLineError,
+    ) -> Result<String, CommandLineError> {
+        match args.next() {
+            Some(x) => Ok(x),
+            None => return Err(on_error),
+        }
+    }
 
-        let action = fetch_arg(&mut args, CommandLineError::NoActionSpecified)?;
+    fn parse_action<T: Iterator<Item = String>>(args: &mut T) -> Result<Action, CommandLineError> {
+        let action = Config::fetch_arg(args, CommandLineError::NoActionSpecified)?;
         let action = match action.as_ref() {
             "read" => Action::ReadMessages,
             "watch" => {
-                let command = fetch_arg(&mut args, CommandLineError::NoWatchCommandSpecified)?;
+                let command = Config::fetch_arg(args, CommandLineError::NoWatchCommandSpecified)?;
                 Action::WatchCommand(command, Vec::new())
             }
             "refresh" => {
-                let name = fetch_arg(&mut args, CommandLineError::NoClientNameSpecified)?;
+                let name = Config::fetch_arg(args, CommandLineError::NoClientNameSpecified)?;
                 Action::RefreshClientByName(name)
             }
             "abort" => Action::Abort,
             _ => return Err(CommandLineError::InvalidValue("action".into(), action)),
         };
+        Ok(action)
+    }
 
-        let mut config = Config {
-            action: action,
-            server_port: Config::DEFAULT_PORT,
-            client_name: None,
-        };
-
+    fn parse_extra_args<T: Iterator<Item = String>>(
+        &mut self,
+        args: &mut T,
+    ) -> Result<(), CommandLineError> {
         loop {
             let arg = match args.next() {
                 Some(x) => x,
@@ -77,19 +79,19 @@ impl Config {
 
             match arg.as_ref() {
                 "-p" => {
-                    let port = fetch_arg(
-                        &mut args,
+                    let port = Config::fetch_arg(
+                        args,
                         CommandLineError::NoValueSpecified("port".into(), "-p".into()),
                     )?;
                     let port = match port.parse::<u16>() {
                         Ok(x) => x,
                         Err(_) => return Err(CommandLineError::InvalidValue("port".into(), port)),
                     };
-                    config.server_port = port;
+                    self.server_port = port;
                 }
                 "-n" => {
-                    let name = fetch_arg(
-                        &mut args,
+                    let name = Config::fetch_arg(
+                        args,
                         CommandLineError::NoValueSpecified("client name".into(), "-n".into()),
                     )?;
                     if name == "" {
@@ -98,10 +100,10 @@ impl Config {
                             "-n".into(),
                         ));
                     }
-                    config.client_name = Some(name);
+                    self.client_name = Some(name);
                 }
                 "--args" => {
-                    if let Action::WatchCommand(_, ref mut command_args) = config.action {
+                    if let Action::WatchCommand(_, ref mut command_args) = self.action {
                         loop {
                             match args.next() {
                                 Some(x) => command_args.push(x),
@@ -115,7 +117,17 @@ impl Config {
                 _ => return Err(CommandLineError::InvalidArgument(arg)),
             }
         }
+        Ok(())
+    }
 
+    pub fn parse<T: Iterator<Item = String>>(mut args: T) -> Result<Config, CommandLineError> {
+        let action = Config::parse_action(&mut args)?;
+        let mut config = Config {
+            action: action,
+            server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+        config.parse_extra_args(&mut args)?;
         Ok(config)
     }
 }
@@ -181,7 +193,10 @@ mod tests {
         let config = config.expect("Parsing should succeed");
 
         let expected = Config {
-            action: Action::WatchCommand("whoami".to_string(), vec!("hello".to_string(), "world".to_string())),
+            action: Action::WatchCommand(
+                "whoami".to_string(),
+                vec!["hello".to_string(), "world".to_string()],
+            ),
             server_port: Config::DEFAULT_PORT,
             client_name: None,
         };
@@ -195,7 +210,10 @@ mod tests {
         let config = config.expect("Parsing should succeed");
 
         let expected = Config {
-            action: Action::WatchCommand("whoami".to_string(), vec!("-p".to_string(), "101".to_string())),
+            action: Action::WatchCommand(
+                "whoami".to_string(),
+                vec!["-p".to_string(), "101".to_string()],
+            ),
             server_port: 100,
             client_name: None,
         };

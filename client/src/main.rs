@@ -1,0 +1,85 @@
+use check_mate_common::ServerCommand;
+use std::{
+    io::Write,
+    net::{Ipv4Addr, SocketAddrV4, TcpStream},
+};
+mod action;
+mod config;
+
+use action::Action;
+use config::Config;
+
+fn send_command(tcp_stream: &mut TcpStream, command: ServerCommand) -> Result<(), std::io::Error> {
+    let buffer = command.to_bytes();
+    match tcp_stream.write(&buffer) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            eprintln!("Failed to read from tcp stream {}", err);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn connect_to_server(server_address: SocketAddrV4) -> TcpStream {
+    loop {
+        let mut tcp_stream = match TcpStream::connect(server_address) {
+            Ok(ok) => ok,
+            Err(err) => {
+                println!("Failed to connect with server: {}. Keep waiting.", err);
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                continue;
+            }
+        };
+        return tcp_stream;
+    }
+}
+
+fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std::io::Error> {
+    if let Some(ref name) = config.client_name {
+        let command = ServerCommand::SetName(name.clone());
+        send_command(tcp_stream, command)?;
+    }
+
+    match &config.action {
+        Action::ReadMessages => read_messages_from_server(tcp_stream),
+        Action::WatchCommand(command) => watch_command(tcp_stream, command),
+        Action::RefreshClientByName(name) => refresh_client_by_name(tcp_stream, name),
+        Action::Abort => abort_server(tcp_stream),
+    }
+}
+
+fn read_messages_from_server(tcp_stream: &mut TcpStream) -> Result<(), std::io::Error> {
+    todo!();
+}
+
+fn watch_command(tcp_stream: &mut TcpStream, command: &str) -> Result<(), std::io::Error> {
+    todo!();
+}
+
+fn refresh_client_by_name(tcp_stream: &mut TcpStream, name: &str) -> Result<(), std::io::Error> {
+    todo!();
+}
+
+fn abort_server(tcp_stream: &mut TcpStream) -> Result<(), std::io::Error> {
+    let command = ServerCommand::Abort;
+    send_command(tcp_stream, command)
+}
+
+fn main() {
+    let config = Config::parse(std::env::args().skip(1));
+    let config = match config {
+        Ok(x) => x,
+        Err(err) => {
+            println!("ERROR: {}", err);
+            std::process::exit(1);
+        }
+    };
+
+    let server_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);
+    let mut tcp_stream = connect_to_server(server_address);
+    let action_result = execute_action(&config, &mut tcp_stream);
+    if let Err(err) = action_result {
+        println!("ERROR: {}", err);
+        std::process::exit(1);
+    }
+}

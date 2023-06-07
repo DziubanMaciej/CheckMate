@@ -1,0 +1,343 @@
+use crate::action::Action;
+
+#[derive(PartialEq, Debug)]
+pub struct Config {
+    pub action: Action,
+    pub server_port: u16,
+    pub client_name: Option<String>,
+}
+
+#[derive(PartialEq, Debug)]
+pub enum CommandLineError {
+    NoActionSpecified,
+    NoWatchCommandSpecified,
+    NoClientNameSpecified,
+    NoValueSpecified(String, String),
+
+    InvalidValue(String, String),
+    InvalidArgument(String),
+}
+
+impl std::fmt::Display for CommandLineError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::NoActionSpecified => write!(f, "Specify action as a first argument"),
+            Self::NoWatchCommandSpecified => write!(f, "Specify command to watch"),
+            Self::NoClientNameSpecified => write!(f, "Specify client name to refresh"),
+            Self::NoValueSpecified(name, option) => {
+                write!(f, "Specify a {} value after {}", name, option)
+            }
+            Self::InvalidValue(name, value) => {
+                write!(f, "Invalid {} value specified: {}", name, value)
+            }
+            Self::InvalidArgument(arg) => write!(f, "Invalid argument specified: {}", arg),
+        }?;
+        Ok(())
+    }
+}
+
+impl Config {
+    pub(crate) const DEFAULT_PORT: u16 = 10005; // TODO move to common
+
+    pub fn parse<T: Iterator<Item = String>>(mut args: T) -> Result<Config, CommandLineError> {
+        let fetch_arg =
+            |args: &mut T, on_error: CommandLineError| -> Result<String, CommandLineError> {
+                match args.next() {
+                    Some(x) => Ok(x),
+                    None => return Err(on_error),
+                }
+            };
+
+        let action = fetch_arg(&mut args, CommandLineError::NoActionSpecified)?;
+        let action = match action.as_ref() {
+            "read" => Action::ReadMessages,
+            "watch" => {
+                let command = fetch_arg(&mut args, CommandLineError::NoWatchCommandSpecified)?;
+                Action::WatchCommand(command)
+            }
+            "refresh" => {
+                let name = fetch_arg(&mut args, CommandLineError::NoClientNameSpecified)?;
+                Action::RefreshClientByName(name)
+            }
+            "abort" => Action::Abort,
+            _ => return Err(CommandLineError::InvalidValue("action".into(), action)),
+        };
+
+        let mut config = Config {
+            action: action,
+            server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+
+        loop {
+            let arg = match args.next() {
+                Some(x) => x,
+                None => break,
+            };
+
+            match arg.as_ref() {
+                "-p" => {
+                    let port = fetch_arg(
+                        &mut args,
+                        CommandLineError::NoValueSpecified("port".into(), "-p".into()),
+                    )?;
+                    let port = match port.parse::<u16>() {
+                        Ok(x) => x,
+                        Err(_) => return Err(CommandLineError::InvalidValue("port".into(), port)),
+                    };
+                    config.server_port = port;
+                }
+                "-n" => {
+                    let name = fetch_arg(
+                        &mut args,
+                        CommandLineError::NoValueSpecified("client name".into(), "-n".into()),
+                    )?;
+                    if name == "" {
+                        return Err(CommandLineError::NoValueSpecified(
+                            "client name".into(),
+                            "-n".into(),
+                        ));
+                    }
+                    config.client_name = Some(name);
+                }
+                _ => return Err(CommandLineError::InvalidArgument(arg)),
+            }
+        }
+
+        Ok(config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn to_owned_string_iter(string_slices: &[&str]) -> <Vec<String> as IntoIterator>::IntoIter {
+        let vector: Vec<String> = string_slices
+            .iter()
+            .map(|string_slice| string_slice.to_string())
+            .collect();
+        vector.into_iter()
+    }
+
+    #[test]
+    fn read_action_is_parsed() {
+        let args = ["read"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::ReadMessages,
+            server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn watch_action_is_parsed() {
+        let args = ["watch", "whoami"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::WatchCommand("whoami".to_string()),
+            server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn refresh_action_is_parsed() {
+        let args = ["refresh", "client12"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::RefreshClientByName("client12".to_string()),
+            server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn abort_action_is_parsed() {
+        let args = ["abort"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::Abort,
+            server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn custom_port_number_is_parsed() {
+        let args = ["refresh", "client12", "-p", "10"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::RefreshClientByName("client12".to_string()),
+            server_port: 10,
+            client_name: None,
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn custom_client_name_is_parsed() {
+        let args = ["refresh", "client12", "-n", "client11"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::RefreshClientByName("client12".to_string()),
+            server_port: Config::DEFAULT_PORT,
+            client_name: Some("client11".to_string()),
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn multiple_custom_args_are_parsed() {
+        let args = ["refresh", "client12", "-n", "client11", "-p", "120"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::RefreshClientByName("client12".to_string()),
+            server_port: 120,
+            client_name: Some("client11".to_string()),
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn no_action_error_is_returned() {
+        let args = [];
+        let config = Config::parse(args.into_iter());
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected = CommandLineError::NoActionSpecified;
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn no_watch_command_error_is_returned() {
+        let args = ["watch"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected = CommandLineError::NoWatchCommandSpecified;
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn no_client_name_error_to_refresh_is_returned() {
+        let args = ["refresh"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected = CommandLineError::NoClientNameSpecified;
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn no_port_error_is_returned() {
+        let args = ["read", "-p"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected = CommandLineError::NoValueSpecified("port".to_string(), "-p".to_string());
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn invalid_action_error_is_returned() {
+        let args = ["jump"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected = CommandLineError::InvalidValue("action".to_string(), "jump".to_string());
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn no_client_name_error_is_returned() {
+        let args = ["read", "-n"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected =
+            CommandLineError::NoValueSpecified("client name".to_string(), "-n".to_string());
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn empty_client_name_error_is_returned() {
+        let args = ["read", "-n", ""];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected =
+            CommandLineError::NoValueSpecified("client name".to_string(), "-n".to_string());
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn invalid_port_error_is_returned() {
+        {
+            let args = ["read", "-p", "-1"];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let parse_error = config.expect_err("Parsing should not succeed");
+
+            let expected = CommandLineError::InvalidValue("port".to_string(), "-1".to_string());
+            assert_eq!(parse_error, expected);
+        }
+        {
+            let args = ["read", "-p", "s"];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let parse_error = config.expect_err("Parsing should not succeed");
+
+            let expected = CommandLineError::InvalidValue("port".to_string(), "s".to_string());
+            assert_eq!(parse_error, expected);
+        }
+        {
+            let args = ["read", "-p", "2000d"];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let parse_error = config.expect_err("Parsing should not succeed");
+
+            let expected = CommandLineError::InvalidValue("port".to_string(), "2000d".to_string());
+            assert_eq!(parse_error, expected);
+        }
+    }
+
+    #[test]
+    fn invalid_argument_error_is_returned() {
+        let args = ["read", "-k"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected = CommandLineError::InvalidArgument("-k".to_string());
+        assert_eq!(parse_error, expected);
+    }
+}
+
+/*
+pub enum CommandLineError {
+    NoActionSpecified,
+    NoWatchCommandSpecified,
+    NoClientNameSpecified,
+    NoValueSpecified(String, String),
+
+    InvalidValue(String, String),
+    InvalidArgument(String),
+}
+
+ */

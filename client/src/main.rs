@@ -42,7 +42,9 @@ fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std
 
     match &config.action {
         Action::ReadMessages => read_messages_from_server(tcp_stream),
-        Action::WatchCommand(command, command_args) => watch_command(tcp_stream, command, command_args),
+        Action::WatchCommand(command, command_args) => {
+            watch_command(tcp_stream, command, command_args)
+        }
         Action::RefreshClientByName(name) => refresh_client_by_name(tcp_stream, name),
         Action::Abort => abort_server(tcp_stream),
     }
@@ -56,6 +58,7 @@ fn execute_command(command: &str, command_args: &Vec<String>) -> String {
     let subprocess = std::process::Command::new(command)
         .args(command_args)
         .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .spawn();
     let subprocess = match subprocess {
         Ok(x) => x,
@@ -68,16 +71,26 @@ fn execute_command(command: &str, command_args: &Vec<String>) -> String {
         Err(err) => return err.to_string(),
     };
 
-    let subprocess_stdout = String::from_utf8(subprocess_result.stdout);
-    let subprocess_stdout = match subprocess_stdout {
+    let subprocess_out = if subprocess_result.status.success() {
+        subprocess_result.stdout
+    } else {
+        subprocess_result.stderr
+    };
+
+    let subprocess_out = String::from_utf8(subprocess_out);
+    let subprocess_out = match subprocess_out {
         Ok(x) => x,
         Err(err) => return err.to_string(),
     };
 
-    subprocess_stdout
+    subprocess_out
 }
 
-fn watch_command(tcp_stream: &mut TcpStream, command: &str, command_args: &Vec<String>) -> Result<(), std::io::Error> {
+fn watch_command(
+    tcp_stream: &mut TcpStream,
+    command: &str,
+    command_args: &Vec<String>,
+) -> Result<(), std::io::Error> {
     loop {
         let command_output = execute_command(command, command_args);
         let server_command = if command_output.is_empty() {

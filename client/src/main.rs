@@ -42,7 +42,7 @@ fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std
 
     match &config.action {
         Action::ReadMessages => read_messages_from_server(tcp_stream),
-        Action::WatchCommand(command) => watch_command(tcp_stream, command),
+        Action::WatchCommand(command, command_args) => watch_command(tcp_stream, command, command_args),
         Action::RefreshClientByName(name) => refresh_client_by_name(tcp_stream, name),
         Action::Abort => abort_server(tcp_stream),
     }
@@ -52,8 +52,9 @@ fn read_messages_from_server(tcp_stream: &mut TcpStream) -> Result<(), std::io::
     todo!();
 }
 
-fn execute_command(command: &str) -> String {
+fn execute_command(command: &str, command_args: &Vec<String>) -> String {
     let subprocess = std::process::Command::new(command)
+        .args(command_args)
         .stdout(std::process::Stdio::piped())
         .spawn();
     let subprocess = match subprocess {
@@ -76,9 +77,9 @@ fn execute_command(command: &str) -> String {
     subprocess_stdout
 }
 
-fn watch_command(tcp_stream: &mut TcpStream, command: &str) -> Result<(), std::io::Error> {
+fn watch_command(tcp_stream: &mut TcpStream, command: &str, command_args: &Vec<String>) -> Result<(), std::io::Error> {
     loop {
-        let command_output = execute_command(command);
+        let command_output = execute_command(command, command_args);
         let server_command = if command_output.is_empty() {
             ServerCommand::SetStatusOk
         } else {

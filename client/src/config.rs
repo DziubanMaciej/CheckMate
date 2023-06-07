@@ -53,7 +53,7 @@ impl Config {
             "read" => Action::ReadMessages,
             "watch" => {
                 let command = fetch_arg(&mut args, CommandLineError::NoWatchCommandSpecified)?;
-                Action::WatchCommand(command)
+                Action::WatchCommand(command, Vec::new())
             }
             "refresh" => {
                 let name = fetch_arg(&mut args, CommandLineError::NoClientNameSpecified)?;
@@ -100,6 +100,18 @@ impl Config {
                     }
                     config.client_name = Some(name);
                 }
+                "--args" => {
+                    if let Action::WatchCommand(_, ref mut command_args) = config.action {
+                        loop {
+                            match args.next() {
+                                Some(x) => command_args.push(x),
+                                None => break,
+                            };
+                        }
+                    } else {
+                        return Err(CommandLineError::InvalidArgument(arg));
+                    }
+                }
                 _ => return Err(CommandLineError::InvalidArgument(arg)),
             }
         }
@@ -141,8 +153,50 @@ mod tests {
         let config = config.expect("Parsing should succeed");
 
         let expected = Config {
-            action: Action::WatchCommand("whoami".to_string()),
+            action: Action::WatchCommand("whoami".to_string(), Vec::new()),
             server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn watch_action_with_empty_args_is_parsed() {
+        let args = ["watch", "whoami", "--args"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::WatchCommand("whoami".to_string(), Vec::new()),
+            server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn watch_action_with_args_is_parsed() {
+        let args = ["watch", "whoami", "--args", "hello", "world"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::WatchCommand("whoami".to_string(), vec!("hello".to_string(), "world".to_string())),
+            server_port: Config::DEFAULT_PORT,
+            client_name: None,
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn watch_action_with_dash_args_is_parsed() {
+        let args = ["watch", "whoami", "-p", "100", "--args", "-p", "101"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let expected = Config {
+            action: Action::WatchCommand("whoami".to_string(), vec!("-p".to_string(), "101".to_string())),
+            server_port: 100,
             client_name: None,
         };
         assert_eq!(config, expected);

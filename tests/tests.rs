@@ -1,4 +1,6 @@
-use std::str::from_utf8;
+use std::{fmt::Display, io::Seek, str::from_utf8};
+
+use crate::test_helpers::get_child_output;
 
 mod test_helpers {
     pub fn get_cargo_bin(name: &str) -> Option<std::path::PathBuf> {
@@ -23,43 +25,83 @@ mod test_helpers {
             None
         }
     }
+
+    pub fn start_server() -> std::process::Child {
+        let server_bin = get_cargo_bin("check_mate_server").expect("Server binary should be found");
+
+        let server = std::process::Command::new(server_bin)
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("Server should start");
+        std::thread::sleep(std::time::Duration::from_millis(50));
+
+        server
+    }
+
+    pub fn start_client(args: &[&str]) -> std::process::Child {
+        let client_bin = get_cargo_bin("check_mate_client").expect("Client binary should be found");
+
+        let client = std::process::Command::new(client_bin)
+            .args(args)
+            .stdout(std::process::Stdio::piped())
+            .spawn()
+            .expect("Client should start");
+        client
+    }
+
+    pub fn get_child_output(child_name: &str, child: std::process::Child) -> String {
+        let out = child
+            .wait_with_output()
+            .unwrap_or_else(|_| panic!("{child_name} should correctly provide output"));
+        assert!(out.status.success());
+        String::from_utf8(out.stdout).expect("Server stdout should be available")
+    }
 }
 
 #[test]
 fn server_closes_after_abort_command() {
-    let client_bin =
-        test_helpers::get_cargo_bin("check_mate_client").expect("Client binary should be found");
-    let server_bin =
-        test_helpers::get_cargo_bin("check_mate_server").expect("Server binary should be found");
+    let server = test_helpers::start_server();
+    let client = test_helpers::start_client(&["abort"]);
 
-    let server = std::process::Command::new(server_bin)
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .expect("Server should start");
-    std::thread::sleep(std::time::Duration::from_millis(50));
-    let client = std::process::Command::new(client_bin)
-        .arg("abort")
-        .stdout(std::process::Stdio::piped())
-        .spawn()
-        .expect("Client should start");
+    assert!(get_child_output("client", client).is_empty());
 
-    let server_out = server
-        .wait_with_output()
-        .expect("Server should correctly provide output");
-    assert!(server_out.status.success());
+    let server_out = get_child_output("server", server);
+    server_out.lines().seek("Received abort command");
+}
 
-    let client_out = client
-        .wait_with_output()
-        .expect("Client should correctly provide output");
-    assert!(client_out.status.success());
+trait Seekable<T> {
+    fn seek(&mut self, arg: T) -> &mut Self;
+}
 
-    let out = String::from_utf8(server_out.stdout).expect("Server stdout should be available");
-    let abort_lines = out
+impl<T> Seekable<<T as Iterator>::Item> for T
+where
+    T: Iterator,
+    <T as Iterator>::Item: Display + PartialEq,
+{
+    fn seek(&mut self, arg: <T as Iterator>::Item) -> &mut Self {
+        loop {
+            let element = match self.next() {
+                Some(x) => x,
+                None => panic!("Could not find element \"{arg}\""),
+            };
+            if element == arg {
+                break;
+            }
+        }
+        self
+    }
+}
+
+#[test]
+fn server_logs_client_name() {
+    let server = test_helpers::start_server();
+    let client = test_helpers::start_client(&["abort", "-n", "Aborter"]);
+
+    assert!(get_child_output("client", client).is_empty());
+
+    let server_out = get_child_output("server", server);
+    server_out
         .lines()
-        .filter(|line| *line == "Received abort command")
-        .count();
-    assert_eq!(
-        abort_lines, 1,
-        "Server should print information about received abort command"
-    );
+        .seek("Name set to Aborter")
+        .seek("Received abort command");
 }

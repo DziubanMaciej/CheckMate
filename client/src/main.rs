@@ -26,7 +26,7 @@ fn connect_to_server(server_address: SocketAddrV4) -> TcpStream {
             Ok(ok) => ok,
             Err(err) => {
                 println!("Failed to connect with server: {}. Keep waiting.", err);
-                std::thread::sleep(std::time::Duration::from_millis(500));
+                std::thread::sleep(std::time::Duration::from_millis(500)); // TODO make this a parameter
                 continue;
             }
         };
@@ -52,8 +52,42 @@ fn read_messages_from_server(tcp_stream: &mut TcpStream) -> Result<(), std::io::
     todo!();
 }
 
+fn execute_command(command: &str) -> String {
+    let subprocess = std::process::Command::new(command)
+        .stdout(std::process::Stdio::piped())
+        .spawn();
+    let subprocess = match subprocess {
+        Ok(x) => x,
+        Err(err) => return err.to_string(),
+    };
+
+    let subprocess_result = subprocess.wait_with_output();
+    let subprocess_result = match subprocess_result {
+        Ok(x) => x,
+        Err(err) => return err.to_string(),
+    };
+
+    let subprocess_stdout = String::from_utf8(subprocess_result.stdout);
+    let subprocess_stdout = match subprocess_stdout {
+        Ok(x) => x,
+        Err(err) => return err.to_string(),
+    };
+
+    subprocess_stdout
+}
+
 fn watch_command(tcp_stream: &mut TcpStream, command: &str) -> Result<(), std::io::Error> {
-    todo!();
+    loop {
+        let command_output = execute_command(command);
+        let server_command = if command_output.is_empty() {
+            ServerCommand::SetStatusOk
+        } else {
+            ServerCommand::SetStatusError(command_output)
+        };
+
+        send_command(tcp_stream, server_command)?;
+        std::thread::sleep(std::time::Duration::from_millis(500)); // TODO make this a parameter
+    }
 }
 
 fn refresh_client_by_name(tcp_stream: &mut TcpStream, name: &str) -> Result<(), std::io::Error> {

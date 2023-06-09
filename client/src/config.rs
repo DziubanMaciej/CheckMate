@@ -10,11 +10,7 @@ pub struct Config {
 
 #[derive(PartialEq, Debug)]
 pub enum CommandLineError {
-    NoActionSpecified,
-    NoWatchCommandSpecified,
-    NoClientNameSpecified,
     NoValueSpecified(String, String),
-
     InvalidValue(String, String),
     InvalidArgument(String),
 }
@@ -22,11 +18,8 @@ pub enum CommandLineError {
 impl std::fmt::Display for CommandLineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Self::NoActionSpecified => write!(f, "Specify action as a first argument"),
-            Self::NoWatchCommandSpecified => write!(f, "Specify command to watch"),
-            Self::NoClientNameSpecified => write!(f, "Specify client name to refresh"),
             Self::NoValueSpecified(name, option) => {
-                write!(f, "Specify a {} value after {}", name, option)
+                write!(f, "Specify a {} after {}", name, option)
             }
             Self::InvalidValue(name, value) => {
                 write!(f, "Invalid {} value specified: {}", name, value)
@@ -49,15 +42,24 @@ impl Config {
     }
 
     fn parse_action<T: Iterator<Item = String>>(args: &mut T) -> Result<Action, CommandLineError> {
-        let action = Config::fetch_arg(args, CommandLineError::NoActionSpecified)?;
+        let action = Config::fetch_arg(
+            args,
+            CommandLineError::NoValueSpecified("action".to_owned(), "binary name".to_owned()),
+        )?;
         let action = match action.as_ref() {
             "read" => Action::ReadMessages,
             "watch" => {
-                let command = Config::fetch_arg(args, CommandLineError::NoWatchCommandSpecified)?;
+                let command = Config::fetch_arg(
+                    args,
+                    CommandLineError::NoValueSpecified("command to run".to_owned(), action),
+                )?;
                 Action::WatchCommand(command, Vec::new())
             }
             "refresh" => {
-                let name = Config::fetch_arg(args, CommandLineError::NoClientNameSpecified)?;
+                let name = Config::fetch_arg(
+                    args,
+                    CommandLineError::NoValueSpecified("client name".to_owned(), action),
+                )?;
                 Action::RefreshClientByName(name)
             }
             "abort" => Action::Abort,
@@ -80,7 +82,7 @@ impl Config {
                 "-p" => {
                     let port = Config::fetch_arg(
                         args,
-                        CommandLineError::NoValueSpecified("port".into(), "-p".into()),
+                        CommandLineError::NoValueSpecified("port".into(), arg),
                     )?;
                     let port = match port.parse::<u16>() {
                         Ok(x) => x,
@@ -91,12 +93,12 @@ impl Config {
                 "-n" => {
                     let name = Config::fetch_arg(
                         args,
-                        CommandLineError::NoValueSpecified("client name".into(), "-n".into()),
+                        CommandLineError::NoValueSpecified("client name".into(), arg.clone()),
                     )?;
                     if name == "" {
                         return Err(CommandLineError::NoValueSpecified(
                             "client name".into(),
-                            "-n".into(),
+                            arg,
                         ));
                     }
                     self.client_name = Some(name);
@@ -295,7 +297,8 @@ mod tests {
         let config = Config::parse(args.into_iter());
         let parse_error = config.expect_err("Parsing should not succeed");
 
-        let expected = CommandLineError::NoActionSpecified;
+        let expected =
+            CommandLineError::NoValueSpecified("action".to_owned(), "binary name".to_owned());
         assert_eq!(parse_error, expected);
     }
 
@@ -305,7 +308,8 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let parse_error = config.expect_err("Parsing should not succeed");
 
-        let expected = CommandLineError::NoWatchCommandSpecified;
+        let expected =
+            CommandLineError::NoValueSpecified("command to run".to_owned(), "watch".to_owned());
         assert_eq!(parse_error, expected);
     }
 
@@ -315,7 +319,8 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let parse_error = config.expect_err("Parsing should not succeed");
 
-        let expected = CommandLineError::NoClientNameSpecified;
+        let expected =
+            CommandLineError::NoValueSpecified("client name".to_owned(), "refresh".to_owned());
         assert_eq!(parse_error, expected);
     }
 

@@ -22,7 +22,7 @@ fn send_command(tcp_stream: &mut TcpStream, command: ServerCommand) -> Result<()
 
 fn connect_to_server(server_address: SocketAddrV4) -> TcpStream {
     loop {
-        let mut tcp_stream = match TcpStream::connect(server_address) {
+        let tcp_stream = match TcpStream::connect(server_address) {
             Ok(ok) => ok,
             Err(err) => {
                 println!("Failed to connect with server: {}. Keep waiting.", err);
@@ -51,7 +51,8 @@ fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std
 }
 
 fn read_messages_from_server(tcp_stream: &mut TcpStream) -> Result<(), std::io::Error> {
-    todo!();
+    let command = ServerCommand::GetStatuses;
+    send_command(tcp_stream, command)
 }
 
 fn execute_command(command: &str, command_args: &Vec<String>) -> String {
@@ -95,7 +96,7 @@ fn watch_command(
         let command_output = execute_command(command, command_args);
         let command_output = command_output
             .lines()
-            .filter(|line| { !line.trim().is_empty()})
+            .filter(|line| !line.trim().is_empty())
             .take(1)
             .next()
             .unwrap_or("")
@@ -111,7 +112,7 @@ fn watch_command(
     }
 }
 
-fn refresh_client_by_name(tcp_stream: &mut TcpStream, name: &str) -> Result<(), std::io::Error> {
+fn refresh_client_by_name(_tcp_stream: &mut TcpStream, _name: &str) -> Result<(), std::io::Error> {
     todo!();
 }
 

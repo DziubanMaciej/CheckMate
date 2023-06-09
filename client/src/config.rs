@@ -1,5 +1,5 @@
 use crate::action::Action;
-use check_mate_common::DEFAULT_PORT;
+use check_mate_common::{fetch_arg, CommandLineError, DEFAULT_PORT};
 
 #[derive(PartialEq, Debug)]
 pub struct Config {
@@ -8,55 +8,23 @@ pub struct Config {
     pub client_name: Option<String>,
 }
 
-#[derive(PartialEq, Debug)]
-pub enum CommandLineError {
-    NoValueSpecified(String, String),
-    InvalidValue(String, String),
-    InvalidArgument(String),
-}
-
-impl std::fmt::Display for CommandLineError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        match self {
-            Self::NoValueSpecified(name, option) => {
-                write!(f, "Specify a {} after {}", name, option)
-            }
-            Self::InvalidValue(name, value) => {
-                write!(f, "Invalid {} value specified: {}", name, value)
-            }
-            Self::InvalidArgument(arg) => write!(f, "Invalid argument specified: {}", arg),
-        }?;
-        Ok(())
-    }
-}
-
 impl Config {
-    fn fetch_arg<T: Iterator<Item = String>>(
-        args: &mut T,
-        on_error: CommandLineError,
-    ) -> Result<String, CommandLineError> {
-        match args.next() {
-            Some(x) => Ok(x),
-            None => return Err(on_error),
-        }
-    }
-
     fn parse_action<T: Iterator<Item = String>>(args: &mut T) -> Result<Action, CommandLineError> {
-        let action = Config::fetch_arg(
+        let action = fetch_arg(
             args,
             CommandLineError::NoValueSpecified("action".to_owned(), "binary name".to_owned()),
         )?;
         let action = match action.as_ref() {
             "read" => Action::ReadMessages,
             "watch" => {
-                let command = Config::fetch_arg(
+                let command = fetch_arg(
                     args,
                     CommandLineError::NoValueSpecified("command to run".to_owned(), action),
                 )?;
                 Action::WatchCommand(command, Vec::new())
             }
             "refresh" => {
-                let name = Config::fetch_arg(
+                let name = fetch_arg(
                     args,
                     CommandLineError::NoValueSpecified("client name".to_owned(), action),
                 )?;
@@ -80,7 +48,7 @@ impl Config {
 
             match arg.as_ref() {
                 "-p" => {
-                    let port = Config::fetch_arg(
+                    let port = fetch_arg(
                         args,
                         CommandLineError::NoValueSpecified("port".into(), arg),
                     )?;
@@ -91,7 +59,7 @@ impl Config {
                     self.server_port = port;
                 }
                 "-n" => {
-                    let name = Config::fetch_arg(
+                    let name = fetch_arg(
                         args,
                         CommandLineError::NoValueSpecified("client name".into(), arg.clone()),
                     )?;

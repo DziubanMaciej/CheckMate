@@ -1,4 +1,7 @@
-use check_mate_common::{ServerCommand, ServerCommandError, DEFAULT_PORT};
+mod config;
+
+use check_mate_common::{ServerCommand, ServerCommandError};
+use config::Config;
 use core::panic;
 use std::{
     io::{BufRead, BufReader},
@@ -93,9 +96,17 @@ impl<'a, T: BufRead> ClientState<'a, T> {
 }
 
 fn main() {
-    let port = DEFAULT_PORT;
-    let socket_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
+    let config = Config::parse(std::env::args().skip(1));
+    let config = match config {
+        Ok(x) => x,
+        Err(err) => {
+            println!("ERROR: {}", err);
+            std::process::exit(1);
+        }
+    };
 
+    println!("Port: {}", config.server_port);
+    let socket_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);
     let listener = TcpListener::bind(socket_address);
     let listener = listener.unwrap_or_else(|err| {
         eprintln!("Failed to bind address: {}", err);

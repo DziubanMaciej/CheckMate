@@ -48,6 +48,7 @@ impl Config {
 
             match arg.as_ref() {
                 "-p" => {
+                    // TODO create functions like fetch_arg_u16, fetch_arg_string, etc.
                     let port = fetch_arg(
                         args,
                         CommandLineError::NoValueSpecified("port".into(), arg),

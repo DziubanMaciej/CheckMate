@@ -1,8 +1,15 @@
-use std::{fmt::Display, io::Seek, str::from_utf8};
-
 use crate::test_helpers::get_child_output;
+use std::fmt::Display;
 
 mod test_helpers {
+    use std::sync::atomic::{AtomicU16, Ordering};
+
+    static PORT_NUMBER: AtomicU16 = AtomicU16::new(check_mate_common::DEFAULT_PORT);
+
+    pub fn get_port_number() -> u16 {
+        PORT_NUMBER.fetch_add(1, Ordering::Relaxed)
+    }
+
     pub fn get_cargo_bin(name: &str) -> Option<std::path::PathBuf> {
         fn target_dir() -> std::path::PathBuf {
             let mut path = std::env::current_exe().unwrap();
@@ -26,10 +33,12 @@ mod test_helpers {
         }
     }
 
-    pub fn start_server() -> std::process::Child {
+    pub fn start_server(port: u16) -> std::process::Child {
         let server_bin = get_cargo_bin("check_mate_server").expect("Server binary should be found");
 
         let server = std::process::Command::new(server_bin)
+            .arg("-p")
+            .arg(port.to_string())
             .stdout(std::process::Stdio::piped())
             .spawn()
             .expect("Server should start");
@@ -38,11 +47,13 @@ mod test_helpers {
         server
     }
 
-    pub fn start_client(args: &[&str]) -> std::process::Child {
+    pub fn start_client(port: u16, args: &[&str]) -> std::process::Child {
         let client_bin = get_cargo_bin("check_mate_client").expect("Client binary should be found");
 
         let client = std::process::Command::new(client_bin)
             .args(args)
+            .arg("-p")
+            .arg(port.to_string())
             .stdout(std::process::Stdio::piped())
             .spawn()
             .expect("Client should start");
@@ -60,8 +71,9 @@ mod test_helpers {
 
 #[test]
 fn server_closes_after_abort_command() {
-    let server = test_helpers::start_server();
-    let client = test_helpers::start_client(&["abort"]);
+    let port = test_helpers::get_port_number();
+    let server = test_helpers::start_server(port);
+    let client = test_helpers::start_client(port, &["abort"]);
 
     assert!(get_child_output("client", client).is_empty());
 
@@ -94,8 +106,9 @@ where
 
 #[test]
 fn server_logs_client_name() {
-    let server = test_helpers::start_server();
-    let client = test_helpers::start_client(&["abort", "-n", "Aborter"]);
+    let port = test_helpers::get_port_number();
+    let server = test_helpers::start_server(port);
+    let client = test_helpers::start_client(port, &["abort", "-n", "Aborter"]);
 
     assert!(get_child_output("client", client).is_empty());
 

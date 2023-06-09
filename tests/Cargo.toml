@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 
 [dev-dependencies]
+check_mate_common = { path = "../common" }
 
 [[test]]
 name = "tests"

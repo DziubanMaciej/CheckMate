@@ -1,4 +1,4 @@
-use check_mate_common::{ServerCommand, ServerCommandError};
+use check_mate_common::{ServerCommand, ServerCommandError, DEFAULT_PORT};
 use core::panic;
 use std::{
     io::{BufRead, BufReader},
@@ -93,7 +93,7 @@ impl<'a, T: BufRead> ClientState<'a, T> {
 }
 
 fn main() {
-    let port = 10005;
+    let port = DEFAULT_PORT;
     let socket_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, port);
 
     let listener = TcpListener::bind(socket_address);

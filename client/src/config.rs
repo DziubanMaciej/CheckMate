@@ -1,4 +1,5 @@
 use crate::action::Action;
+use check_mate_common::DEFAULT_PORT;
 
 #[derive(PartialEq, Debug)]
 pub struct Config {
@@ -37,8 +38,6 @@ impl std::fmt::Display for CommandLineError {
 }
 
 impl Config {
-    pub(crate) const DEFAULT_PORT: u16 = 10005; // TODO move to common
-
     fn fetch_arg<T: Iterator<Item = String>>(
         args: &mut T,
         on_error: CommandLineError,
@@ -124,7 +123,7 @@ impl Config {
         let action = Config::parse_action(&mut args)?;
         let mut config = Config {
             action: action,
-            server_port: Config::DEFAULT_PORT,
+            server_port: DEFAULT_PORT,
             client_name: None,
         };
         config.parse_extra_args(&mut args)?;
@@ -152,7 +151,7 @@ mod tests {
 
         let expected = Config {
             action: Action::ReadMessages,
-            server_port: Config::DEFAULT_PORT,
+            server_port: DEFAULT_PORT,
             client_name: None,
         };
         assert_eq!(config, expected);
@@ -166,7 +165,7 @@ mod tests {
 
         let expected = Config {
             action: Action::WatchCommand("whoami".to_string(), Vec::new()),
-            server_port: Config::DEFAULT_PORT,
+            server_port: DEFAULT_PORT,
             client_name: None,
         };
         assert_eq!(config, expected);
@@ -180,7 +179,7 @@ mod tests {
 
         let expected = Config {
             action: Action::WatchCommand("whoami".to_string(), Vec::new()),
-            server_port: Config::DEFAULT_PORT,
+            server_port: DEFAULT_PORT,
             client_name: None,
         };
         assert_eq!(config, expected);
@@ -197,7 +196,7 @@ mod tests {
                 "whoami".to_string(),
                 vec!["hello".to_string(), "world".to_string()],
             ),
-            server_port: Config::DEFAULT_PORT,
+            server_port: DEFAULT_PORT,
             client_name: None,
         };
         assert_eq!(config, expected);
@@ -228,7 +227,7 @@ mod tests {
 
         let expected = Config {
             action: Action::RefreshClientByName("client12".to_string()),
-            server_port: Config::DEFAULT_PORT,
+            server_port: DEFAULT_PORT,
             client_name: None,
         };
         assert_eq!(config, expected);
@@ -242,7 +241,7 @@ mod tests {
 
         let expected = Config {
             action: Action::Abort,
-            server_port: Config::DEFAULT_PORT,
+            server_port: DEFAULT_PORT,
             client_name: None,
         };
         assert_eq!(config, expected);
@@ -270,7 +269,7 @@ mod tests {
 
         let expected = Config {
             action: Action::RefreshClientByName("client12".to_string()),
-            server_port: Config::DEFAULT_PORT,
+            server_port: DEFAULT_PORT,
             client_name: Some("client11".to_string()),
         };
         assert_eq!(config, expected);

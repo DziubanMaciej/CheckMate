@@ -1,4 +1,4 @@
-use check_mate_common::{ReceiveCommandError, ServerCommand};
+use check_mate_common::{ReceiveCommandError, ServerCommand, ServerCommandError};
 use std::{
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4, TcpStream},
@@ -21,20 +21,35 @@ fn send_command(tcp_stream: &mut TcpStream, command: ServerCommand) -> Result<()
 }
 
 fn receive_command(tcp_stream: &mut TcpStream) -> Result<ServerCommand, ReceiveCommandError> {
-    let command_size = std::mem::size_of::<ServerCommand>();
-    let mut buffer = Vec::new();
-    buffer.resize(command_size, 0);
+    const CHUNK_SIZE: usize = 32;
 
-    let bytes = &mut buffer[0..command_size];
-    match tcp_stream.read(bytes) {
-        Ok(_) => {
-            let parse_result = ServerCommand::from_bytes(bytes)?;
-            Ok(parse_result.command)
-        }
-        Err(err) => {
-            eprintln!("Failed to read from tcp stream {}", err);
-            std::process::exit(1);
-        }
+    let mut buffer = Vec::new();
+    buffer.resize(CHUNK_SIZE, 0);
+    let mut total_read_length = 0;
+
+    loop {
+        let read_length = tcp_stream.read(&mut buffer[total_read_length..]);
+        let read_length = match read_length {
+            Ok(x) => x,
+            Err(err) => {
+                eprintln!("Failed to read from tcp stream {}", err);
+                std::process::exit(1);
+            }
+        };
+        total_read_length += read_length;
+
+        let error = match ServerCommand::from_bytes(&buffer[0..total_read_length]) {
+            Ok(x) => break Ok(x.command),
+            Err(err) => err,
+        };
+
+        match error {
+            ServerCommandError::TooFewBytes => {
+                buffer.resize(buffer.len() + CHUNK_SIZE, 0);
+                continue;
+            }
+            _ => break Err(error.into()),
+        };
     }
 }
 

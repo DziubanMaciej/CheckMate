@@ -157,8 +157,8 @@ fn server_logs_client_name() {
 #[test]
 fn read_messages_with_single_client_works() {
     let port = test_helpers::get_port_number();
-    let mut server = test_helpers::Subprocess::start_server("server", port);
-    let mut client_watcher = test_helpers::Subprocess::start_client(
+    let _server = test_helpers::Subprocess::start_server("server", port);
+    let _client_watcher = test_helpers::Subprocess::start_client(
         "client_watcher",
         port,
         &[
@@ -178,8 +178,8 @@ fn read_messages_with_single_client_works() {
 #[test]
 fn read_messages_with_multiple_clients_works() {
     let port = test_helpers::get_port_number();
-    let mut server = test_helpers::Subprocess::start_server("server", port);
-    let mut client_watcher1 = test_helpers::Subprocess::start_client(
+    let _server = test_helpers::Subprocess::start_server("server", port);
+    let _client_watcher1 = test_helpers::Subprocess::start_client(
         "client_watcher1",
         port,
         &[
@@ -188,7 +188,7 @@ fn read_messages_with_multiple_clients_works() {
             "\n\n\n \nsome nice error\nsecond line ignored",
         ],
     );
-    let mut client_watcher2 = test_helpers::Subprocess::start_client(
+    let _client_watcher2 = test_helpers::Subprocess::start_client(
         "client_watcher2",
         port,
         &[

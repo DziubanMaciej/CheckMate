@@ -9,7 +9,10 @@ pub struct Config {
 }
 
 impl Config {
-    fn parse_action<T: Iterator<Item = String>>(args: &mut T) -> Result<Action, CommandLineError> {
+    fn parse_action<T>(args: &mut T) -> Result<Action, CommandLineError>
+    where
+        T: Iterator<Item = String>,
+    {
         let action = fetch_arg(
             args,
             CommandLineError::NoValueSpecified("action".to_owned(), "binary name".to_owned()),
@@ -21,7 +24,19 @@ impl Config {
                     args,
                     CommandLineError::NoValueSpecified("command to run".to_owned(), action),
                 )?;
-                Action::WatchCommand(command, Vec::new())
+                let mut command_args = Vec::new();
+                loop {
+                    if let Some(arg) = args.next() {
+                        if arg != "--" {
+                            command_args.push(arg);
+                        } else {
+                            break; // end of watch args
+                        }
+                    } else {
+                        break; // no more args
+                    }
+                }
+                Action::WatchCommand(command, command_args)
             }
             "refresh" => {
                 let name = fetch_arg(
@@ -49,10 +64,8 @@ impl Config {
             match arg.as_ref() {
                 "-p" => {
                     // TODO create functions like fetch_arg_u16, fetch_arg_string, etc.
-                    let port = fetch_arg(
-                        args,
-                        CommandLineError::NoValueSpecified("port".into(), arg),
-                    )?;
+                    let port =
+                        fetch_arg(args, CommandLineError::NoValueSpecified("port".into(), arg))?;
                     let port = match port.parse::<u16>() {
                         Ok(x) => x,
                         Err(_) => return Err(CommandLineError::InvalidValue("port".into(), port)),
@@ -90,7 +103,10 @@ impl Config {
         Ok(())
     }
 
-    pub fn parse<T: Iterator<Item = String>>(mut args: T) -> Result<Config, CommandLineError> {
+    pub fn parse<T>(mut args: T) -> Result<Config, CommandLineError>
+    where
+        T: Iterator<Item = String>,
+    {
         let action = Config::parse_action(&mut args)?;
         let mut config = Config {
             action: action,
@@ -143,8 +159,8 @@ mod tests {
     }
 
     #[test]
-    fn watch_action_with_empty_args_is_parsed() {
-        let args = ["watch", "whoami", "--args"];
+    fn watch_action_with_command_with_no_args_is_parsed() {
+        let args = ["watch", "whoami"];
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
@@ -158,7 +174,7 @@ mod tests {
 
     #[test]
     fn watch_action_with_args_is_parsed() {
-        let args = ["watch", "whoami", "--args", "hello", "world"];
+        let args = ["watch", "whoami", "hello", "world"];
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
@@ -175,7 +191,7 @@ mod tests {
 
     #[test]
     fn watch_action_with_dash_args_is_parsed() {
-        let args = ["watch", "whoami", "-p", "100", "--args", "-p", "101"];
+        let args = ["watch", "whoami", "-p", "101", "--", "-p", "100"];
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 

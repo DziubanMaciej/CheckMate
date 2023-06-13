@@ -50,10 +50,15 @@ mod test_helpers {
     pub fn start_client(port: u16, args: &[&str]) -> std::process::Child {
         let client_bin = get_cargo_bin("check_mate_client").expect("Client binary should be found");
 
+        let port = port.to_string();
+        let mut port_args = vec!["-p", &port];
+        if args.len() > 0 && args[0] == "watch" && !args.contains(&"--") {
+            port_args.insert(0, "--");
+        }
+
         let client = std::process::Command::new(client_bin)
             .args(args)
-            .arg("-p")
-            .arg(port.to_string())
+            .args(port_args)
             .stdout(std::process::Stdio::piped())
             .spawn()
             .expect("Client should start");
@@ -66,7 +71,6 @@ mod test_helpers {
             .unwrap_or_else(|_| panic!("{child_name} should correctly provide output"));
         assert!(out.status.success());
         String::from_utf8(out.stdout).expect("Server stdout should be available")
-
     }
 }
 
@@ -120,19 +124,58 @@ fn server_logs_client_name() {
         .seek("Received abort command");
 }
 
-#[ignore]
 #[test]
 fn read_messages_with_single_client_works() {
     let port = test_helpers::get_port_number();
     let mut server = test_helpers::start_server(port);
-    let mut client_watcher = test_helpers::start_client(port, &["watch", "echo", "--args", "\n\n\n    \nsome nice error\nsecond line ignored"]);
+    let mut client_watcher = test_helpers::start_client(
+        port,
+        &[
+            "watch",
+            "echo",
+            "\n\n\n \nsome nice error\nsecond line ignored",
+        ],
+    );
 
     std::thread::sleep(std::time::Duration::from_millis(50));
     let client_reader = test_helpers::start_client(port, &["read"]);
 
     let client_reader_out = get_child_output("client_reader", client_reader);
-    assert_eq!(client_reader_out, "some nice error\n");
-
     server.kill().expect("Server should be killable");
-    client_watcher.kill().expect("Client watcher should be killable");
+    client_watcher.kill().expect("Client should be killable");
+
+    assert_eq!(client_reader_out, "some nice error\n");
+}
+
+#[ignore]
+#[test]
+fn read_messages_with_multiple_clients_works() {
+    let port = test_helpers::get_port_number();
+    let mut server = test_helpers::start_server(port);
+    let mut client_watcher1 = test_helpers::start_client(
+        port,
+        &[
+            "watch",
+            "echo",
+            "\n\n\n \nsome nice error\nsecond line ignored",
+        ],
+    );
+    let mut client_watcher2 = test_helpers::start_client(
+        port,
+        &[
+            "watch",
+            "echo",
+            "\n\n\n \nsome other error\nsecond line ignored",
+        ],
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let client_reader = test_helpers::start_client(port, &["read"]);
+
+    let client_reader_out = get_child_output("client_reader", client_reader);
+    server.kill().expect("Server should be killable");
+    client_watcher1.kill().expect("Client should be killable");
+    client_watcher2.kill().expect("Client should be killable");
+
+    assert_eq!(client_reader_out, "some nice error\n");
 }

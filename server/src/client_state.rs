@@ -1,4 +1,4 @@
-use check_mate_common::{ServerCommand, ServerCommandError};
+use check_mate_common::{ReceiveCommandError, ServerCommand};
 use std::io::BufRead;
 
 pub struct ClientState<'a, T: BufRead> {
@@ -45,10 +45,10 @@ impl<'a, T: BufRead> ClientState<'a, T> {
         Ok(Some(parse_result.command))
     }
 
-    pub fn process_command<ReadStatusesCb: FnOnce()>(
+    pub fn process_command<ReadStatusesCb: FnMut()>(
         &mut self,
         command: ServerCommand,
-        on_read_statuses: ReadStatusesCb,
+        mut on_read_statuses: ReadStatusesCb,
     ) {
         match command {
             ServerCommand::Abort => {
@@ -81,24 +81,7 @@ impl<'a, T: BufRead> ClientState<'a, T> {
                 println!("Name set to {}", name);
                 self.name = Some(name);
             }
+            ServerCommand::Statuses(_) => panic!("Unexpected message received"),
         };
-    }
-}
-
-pub enum ReceiveCommandError {
-    IoError(std::io::Error),
-    CommandParseError(ServerCommandError),
-    ClientDisconnected,
-}
-
-impl From<std::io::Error> for ReceiveCommandError {
-    fn from(err: std::io::Error) -> Self {
-        ReceiveCommandError::IoError(err)
-    }
-}
-
-impl From<ServerCommandError> for ReceiveCommandError {
-    fn from(err: ServerCommandError) -> Self {
-        ReceiveCommandError::CommandParseError(err)
     }
 }

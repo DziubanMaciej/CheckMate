@@ -2,19 +2,33 @@ mod client_state;
 mod config;
 mod thread_communication;
 
-use client_state::{ClientState, ReceiveCommandError};
+use check_mate_common::{ReceiveCommandError, ServerCommand};
+use client_state::ClientState;
 use config::Config;
+use std::io::Write;
 use std::{
-    io::{BufReader},
+    io::BufReader,
     net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
     sync::mpsc,
 };
 use thread_communication::ThreadCommunication;
 
+fn send_command<T: Write>(
+    tcp_stream: &mut T,
+    command: ServerCommand,
+) -> Result<(), std::io::Error> {
+    let buffer = command.to_bytes();
+    tcp_stream.write(&buffer)?;
+    Ok(())
+}
+
 fn handle_client(mut thread_communication: ThreadCommunication, tcp_stream: TcpStream) {
     // Initialize communication with our client
-    tcp_stream.set_nonblocking(true).expect("Cannot use nonblocking sockets");
-    let mut input_stream = BufReader::new(tcp_stream);
+    tcp_stream
+        .set_nonblocking(true)
+        .expect("Cannot use nonblocking sockets");
+    let mut input_stream = BufReader::new(tcp_stream.try_clone().unwrap());
+    let mut output_stream = tcp_stream.try_clone().unwrap();
     let mut client_state = ClientState::new(&mut input_stream);
 
     // Initialize communication with other server threads
@@ -25,10 +39,8 @@ fn handle_client(mut thread_communication: ThreadCommunication, tcp_stream: TcpS
     let main_loop_result: Result<(), ReceiveCommandError> = loop {
         let on_read_statuses = || {
             let errors = thread_communication.read_messages(&receiver);
-
-            for a in errors {
-                println!("niceErr: {a}");
-            }
+            let command = ServerCommand::Statuses(errors);
+            let _send_result = send_command(&mut output_stream, command); // ignore result - if it failed, client must have died
         };
 
         // Communicate with client
@@ -37,7 +49,7 @@ fn handle_client(mut thread_communication: ThreadCommunication, tcp_stream: TcpS
             Err(err) => break Err(err),
         };
         if let Some(command) = command {
-            client_state.process_command(command, &on_read_statuses);
+            client_state.process_command(command, on_read_statuses);
         }
 
         // Communicate with other threads

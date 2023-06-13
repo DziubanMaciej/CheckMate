@@ -66,6 +66,7 @@ mod test_helpers {
             .unwrap_or_else(|_| panic!("{child_name} should correctly provide output"));
         assert!(out.status.success());
         String::from_utf8(out.stdout).expect("Server stdout should be available")
+
     }
 }
 
@@ -117,4 +118,21 @@ fn server_logs_client_name() {
         .lines()
         .seek("Name set to Aborter")
         .seek("Received abort command");
+}
+
+#[ignore]
+#[test]
+fn read_messages_with_single_client_works() {
+    let port = test_helpers::get_port_number();
+    let mut server = test_helpers::start_server(port);
+    let mut client_watcher = test_helpers::start_client(port, &["watch", "echo", "--args", "\n\n\n    \nsome nice error\nsecond line ignored"]);
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let client_reader = test_helpers::start_client(port, &["read"]);
+
+    let client_reader_out = get_child_output("client_reader", client_reader);
+    assert_eq!(client_reader_out, "some nice error\n");
+
+    server.kill().expect("Server should be killable");
+    client_watcher.kill().expect("Client watcher should be killable");
 }

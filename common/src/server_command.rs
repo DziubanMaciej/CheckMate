@@ -9,6 +9,7 @@ pub enum ServerCommand {
     GetStatuses,
     RefreshClientByName(String),
     SetName(String),
+    Statuses(Vec<String>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -31,6 +32,7 @@ impl ServerCommand {
     pub(crate) const ID_GET_STATUSES: u8 = 4;
     pub(crate) const ID_REFRESH_CLIENT_BY_NAME: u8 = 5;
     pub(crate) const ID_SET_NAME: u8 = 6;
+    pub(crate) const ID_STATUSES: u8 = 7;
 
     pub fn from_bytes(bytes: &[u8]) -> Result<ServerCommandParse, ServerCommandError> {
         let mut bytes_used = 0;
@@ -55,6 +57,14 @@ impl ServerCommand {
             let string = String::from_utf8(string.into())?;
             Ok(string)
         };
+        let take_strings = |index: &mut usize| -> Result<Vec<String>, ServerCommandError> {
+            let strings_size = take_dword(index)?;
+            let mut strings: Vec<String> = Vec::new();
+            for _ in 0..strings_size {
+                strings.push(take_string(index)?);
+            }
+            Ok(strings)
+        };
 
         let command_type = take_bytes(&mut bytes_used, 1)?[0];
         let command = match command_type {
@@ -68,6 +78,7 @@ impl ServerCommand {
                 ServerCommand::RefreshClientByName(take_string(&mut bytes_used)?)
             }
             ServerCommand::ID_SET_NAME => ServerCommand::SetName(take_string(&mut bytes_used)?),
+            ServerCommand::ID_STATUSES => ServerCommand::Statuses(take_strings(&mut bytes_used)?),
             _ => return Err(ServerCommandError::UnknownCommand),
         };
         Ok(ServerCommandParse {
@@ -77,6 +88,13 @@ impl ServerCommand {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
+        fn append_strings(bytes: &mut Vec<u8>, strings: &Vec<String>) {
+            let vector_len = &strings.len().to_le_bytes()[0..4];
+            bytes.extend_from_slice(&vector_len);
+            for string in strings {
+                append_string(bytes, string)
+            }
+        }
         fn append_string(bytes: &mut Vec<u8>, string: &String) {
             let string_bytes = string.as_bytes();
             let string_len = &string_bytes.len().to_le_bytes()[0..4];
@@ -103,6 +121,11 @@ impl ServerCommand {
                 append_string(&mut result, &name);
                 result
             }
+            ServerCommand::Statuses(statuses) => {
+                let mut result = vec![ServerCommand::ID_STATUSES];
+                append_strings(&mut result, statuses);
+                result
+            }
         }
     }
 }
@@ -117,15 +140,28 @@ pub struct ServerCommandParse {
 mod tests {
     use super::*;
 
+    fn get_expected_serialized_string_length(s: &str) -> usize {
+        let string_length_size = 4;
+        let string_size = s.len(); // this will not work for non-ascii characters, but we won't be using them anyway
+        string_length_size + string_size
+    }
+
     fn get_expected_command_length_no_data() -> usize {
         1
     }
 
     fn get_expected_command_length_string(s: &str) -> usize {
+        get_expected_command_length_no_data() + get_expected_serialized_string_length(s)
+    }
+
+    fn get_expected_command_length_string_vec(v: &Vec<String>) -> usize {
         let header_size = get_expected_command_length_no_data();
-        let string_length_size = 4;
-        let string_size = s.len(); // this will not work for non-ascii characters, but we won't be using them anyway
-        header_size + string_length_size + string_size
+        let vec_length_size = 4;
+        let strings_size: usize = v
+            .iter()
+            .map(|x| get_expected_serialized_string_length(x))
+            .sum();
+        header_size + vec_length_size + strings_size
     }
 
     #[test]
@@ -191,6 +227,19 @@ mod tests {
         assert_eq!(
             parse_result.bytes_used,
             get_expected_command_length_string(&name)
+        );
+    }
+
+    #[test]
+    fn command_statuses_is_serialized() {
+        let statuses = vec!["err".to_owned(), "warn".to_owned(), "fail".to_owned()];
+        let command = ServerCommand::Statuses(statuses.clone());
+        let bytes = command.to_bytes();
+        let parse_result = ServerCommand::from_bytes(&bytes).expect("Command should deserialize");
+        assert_eq!(parse_result.command, command);
+        assert_eq!(
+            parse_result.bytes_used,
+            get_expected_command_length_string_vec(&statuses)
         );
     }
 

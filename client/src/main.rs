@@ -1,6 +1,6 @@
-use check_mate_common::ServerCommand;
+use check_mate_common::{ReceiveCommandError, ServerCommand};
 use std::{
-    io::Write,
+    io::{Read, Write},
     net::{Ipv4Addr, SocketAddrV4, TcpStream},
 };
 mod action;
@@ -13,6 +13,24 @@ fn send_command(tcp_stream: &mut TcpStream, command: ServerCommand) -> Result<()
     let buffer = command.to_bytes();
     match tcp_stream.write(&buffer) {
         Ok(_) => Ok(()),
+        Err(err) => {
+            eprintln!("Failed to write to tcp stream {}", err);
+            std::process::exit(1);
+        }
+    }
+}
+
+fn receive_command(tcp_stream: &mut TcpStream) -> Result<ServerCommand, ReceiveCommandError> {
+    let command_size = std::mem::size_of::<ServerCommand>();
+    let mut buffer = Vec::new();
+    buffer.resize(command_size, 0);
+
+    let bytes = &mut buffer[0..command_size];
+    match tcp_stream.read(bytes) {
+        Ok(_) => {
+            let parse_result = ServerCommand::from_bytes(bytes)?;
+            Ok(parse_result.command)
+        }
         Err(err) => {
             eprintln!("Failed to read from tcp stream {}", err);
             std::process::exit(1);
@@ -51,8 +69,17 @@ fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std
 }
 
 fn read_messages_from_server(tcp_stream: &mut TcpStream) -> Result<(), std::io::Error> {
-    let command = ServerCommand::GetStatuses;
-    send_command(tcp_stream, command)
+    send_command(tcp_stream, ServerCommand::GetStatuses).unwrap(); // TODO remove unwrap
+    match receive_command(tcp_stream).unwrap() {
+        // TODO remove unwrap
+        ServerCommand::Statuses(statuses) => {
+            for status in statuses.iter() {
+                println!("{}", status);
+            }
+        }
+        _ => panic!("Unexpected command received"),
+    }
+    Ok(())
 }
 
 fn execute_command(command: &str, command_args: &Vec<String>) -> String {

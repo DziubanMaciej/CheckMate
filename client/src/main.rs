@@ -1,57 +1,10 @@
-use check_mate_common::{ReceiveCommandError, ServerCommand, ServerCommandError};
-use std::{
-    io::{Read, Write},
-    net::{Ipv4Addr, SocketAddrV4, TcpStream},
-};
+use check_mate_common::{CommunicationError, ServerCommand};
+use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
 mod action;
 mod config;
 
 use action::Action;
 use config::Config;
-
-fn send_command(tcp_stream: &mut TcpStream, command: ServerCommand) -> Result<(), std::io::Error> {
-    let buffer = command.to_bytes();
-    match tcp_stream.write(&buffer) {
-        Ok(_) => Ok(()),
-        Err(err) => {
-            eprintln!("Failed to write to tcp stream {}", err);
-            std::process::exit(1);
-        }
-    }
-}
-
-fn receive_command(tcp_stream: &mut TcpStream) -> Result<ServerCommand, ReceiveCommandError> {
-    const CHUNK_SIZE: usize = 32;
-
-    let mut buffer = Vec::new();
-    buffer.resize(CHUNK_SIZE, 0);
-    let mut total_read_length = 0;
-
-    loop {
-        let read_length = tcp_stream.read(&mut buffer[total_read_length..]);
-        let read_length = match read_length {
-            Ok(x) => x,
-            Err(err) => {
-                eprintln!("Failed to read from tcp stream {}", err);
-                std::process::exit(1);
-            }
-        };
-        total_read_length += read_length;
-
-        let error = match ServerCommand::from_bytes(&buffer[0..total_read_length]) {
-            Ok(x) => break Ok(x.command),
-            Err(err) => err,
-        };
-
-        match error {
-            ServerCommandError::TooFewBytes => {
-                buffer.resize(buffer.len() + CHUNK_SIZE, 0);
-                continue;
-            }
-            _ => break Err(error.into()),
-        };
-    }
-}
 
 fn connect_to_server(server_address: SocketAddrV4) -> TcpStream {
     loop {
@@ -67,10 +20,10 @@ fn connect_to_server(server_address: SocketAddrV4) -> TcpStream {
     }
 }
 
-fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std::io::Error> {
+fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), CommunicationError> {
     if let Some(ref name) = config.client_name {
         let command = ServerCommand::SetName(name.clone());
-        send_command(tcp_stream, command)?;
+        command.send(tcp_stream, true)?;
     }
 
     match &config.action {
@@ -88,10 +41,10 @@ fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std
 fn read_messages_from_server(
     tcp_stream: &mut TcpStream,
     include_names: bool,
-) -> Result<(), std::io::Error> {
-    send_command(tcp_stream, ServerCommand::GetStatuses(include_names)).unwrap(); // TODO remove unwrap
-    match receive_command(tcp_stream).unwrap() {
-        // TODO remove unwrap
+) -> Result<(), CommunicationError> {
+    ServerCommand::GetStatuses(include_names).send(tcp_stream, true)?;
+
+    match ServerCommand::receive_blocking(tcp_stream)? {
         ServerCommand::Statuses(statuses) => {
             for status in statuses.iter() {
                 println!("{}", status);
@@ -138,7 +91,7 @@ fn watch_command(
     tcp_stream: &mut TcpStream,
     command: &str,
     command_args: &Vec<String>,
-) -> Result<(), std::io::Error> {
+) -> Result<(), CommunicationError> {
     loop {
         let command_output = execute_command(command, command_args);
         let command_output = command_output
@@ -154,18 +107,21 @@ fn watch_command(
             ServerCommand::SetStatusError(command_output)
         };
 
-        send_command(tcp_stream, server_command)?;
+        server_command.send(tcp_stream, true)?;
         std::thread::sleep(std::time::Duration::from_millis(500)); // TODO make this a parameter
     }
 }
 
-fn refresh_client_by_name(_tcp_stream: &mut TcpStream, _name: &str) -> Result<(), std::io::Error> {
+fn refresh_client_by_name(
+    _tcp_stream: &mut TcpStream,
+    _name: &str,
+) -> Result<(), CommunicationError> {
     todo!();
 }
 
-fn abort_server(tcp_stream: &mut TcpStream) -> Result<(), std::io::Error> {
+fn abort_server(tcp_stream: &mut TcpStream) -> Result<(), CommunicationError> {
     let command = ServerCommand::Abort;
-    send_command(tcp_stream, command)
+    command.send(tcp_stream, true)
 }
 
 fn main() {

@@ -1,4 +1,9 @@
-use std::string::FromUtf8Error;
+use std::{
+    io::{BufRead, Read, Write},
+    string::FromUtf8Error,
+};
+
+use crate::CommunicationError;
 
 /// Command sent from client to server
 #[derive(Debug, PartialEq, Eq)]
@@ -18,6 +23,12 @@ pub enum ServerCommandError {
     InvalidStringEncoding,
     InvalidBoolean,
     UnknownCommand,
+}
+
+impl std::fmt::Display for ServerCommandError {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl From<FromUtf8Error> for ServerCommandError {
@@ -144,6 +155,96 @@ impl ServerCommand {
                 append_strings(&mut result, statuses);
                 result
             }
+        }
+    }
+
+    pub fn send<T>(
+        &self,
+        output_stream: &mut T,
+        must_succeed: bool,
+    ) -> Result<(), CommunicationError>
+    where
+        T: Write,
+    {
+        let buffer = self.to_bytes();
+        let write_result = output_stream.write(&buffer);
+
+        if let Err(err) = write_result {
+            if must_succeed {
+                eprintln!("Failed to write to tcp stream {}", err);
+                std::process::exit(1);
+            } else {
+                return Err(err.into());
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn receive_non_blocking<T: BufRead>(
+        input_stream: &mut T,
+    ) -> Result<Option<ServerCommand>, CommunicationError> {
+        let buffer = input_stream.fill_buf();
+        let buffer = match buffer {
+            Ok(x) => x,
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::WouldBlock {
+                    return Ok(None);
+                } else {
+                    return Err(err.into());
+                }
+            }
+        };
+        if buffer.len() == 0 {
+            return Err(CommunicationError::ClientDisconnected);
+        }
+
+        let parse_result = ServerCommand::from_bytes(buffer);
+        let parse_result = match parse_result {
+            Ok(x) => x,
+            Err(err) => {
+                return match err {
+                    ServerCommandError::TooFewBytes => Ok(None),
+                    _ => Err(err.into()),
+                }
+            }
+        };
+        input_stream.consume(parse_result.bytes_used);
+        Ok(Some(parse_result.command))
+    }
+
+    pub fn receive_blocking<T: Read>(
+        input_stream: &mut T,
+    ) -> Result<ServerCommand, CommunicationError> {
+        const CHUNK_SIZE: usize = 32;
+
+        let mut buffer = Vec::new();
+        buffer.resize(CHUNK_SIZE, 0);
+        let mut total_read_length = 0;
+
+        loop {
+            let read_length = input_stream.read(&mut buffer[total_read_length..]);
+            let read_length = match read_length {
+                Ok(x) => x,
+                Err(err) => {
+                    eprintln!("Failed to read from tcp stream {}", err);
+                    std::process::exit(1);
+                }
+            };
+            total_read_length += read_length;
+
+            let error = match ServerCommand::from_bytes(&buffer[0..total_read_length]) {
+                Ok(x) => break Ok(x.command),
+                Err(err) => err,
+            };
+
+            match error {
+                ServerCommandError::TooFewBytes => {
+                    buffer.resize(buffer.len() + CHUNK_SIZE, 0);
+                    continue;
+                }
+                _ => break Err(error.into()),
+            };
         }
     }
 }

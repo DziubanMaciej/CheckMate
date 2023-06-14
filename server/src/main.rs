@@ -2,25 +2,15 @@ mod client_state;
 mod config;
 mod thread_communication;
 
-use check_mate_common::{ReceiveCommandError, ServerCommand};
+use check_mate_common::{CommunicationError, ServerCommand};
 use client_state::ClientState;
 use config::Config;
-use std::io::Write;
 use std::{
     io::BufReader,
     net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream},
     sync::mpsc,
 };
 use thread_communication::ThreadCommunication;
-
-fn send_command<T: Write>(
-    tcp_stream: &mut T,
-    command: ServerCommand,
-) -> Result<(), std::io::Error> {
-    let buffer = command.to_bytes();
-    tcp_stream.write(&buffer)?;
-    Ok(())
-}
 
 fn handle_client(mut thread_communication: ThreadCommunication, tcp_stream: TcpStream) {
     // Initialize communication with our client
@@ -36,36 +26,38 @@ fn handle_client(mut thread_communication: ThreadCommunication, tcp_stream: TcpS
     thread_communication.add_current_thread(sender);
 
     // Main loop
-    let main_loop_result: Result<(), ReceiveCommandError> = loop {
-        let on_read_statuses = |include_names: bool| {
-            let errors = thread_communication.read_messages(&receiver, include_names);
-            let command = ServerCommand::Statuses(errors);
-            let _send_result = send_command(&mut output_stream, command); // ignore result - if it failed, client must have died
-        };
+    let main_loop_result: Result<(), CommunicationError> = loop {
+        // Communicate with other threads
+        thread_communication.process_messages_from_other_threads(&mut receiver, &mut client_state);
 
         // Communicate with client
-        let command = match client_state.receive_command() {
+        let command = match ServerCommand::receive_non_blocking(client_state.get_input_stream()) {
             Ok(x) => x,
             Err(err) => break Err(err),
         };
         if let Some(command) = command {
+            let on_read_statuses = |include_names: bool| {
+                let errors = thread_communication.read_messages(&receiver, include_names);
+                let command = ServerCommand::Statuses(errors);
+                let send_result = command.send(&mut output_stream, false);
+                if let Err(_) = send_result {
+                    // eprintln!("Client {} got disconnected", client_state.get_name_for_logging());
+                }
+            };
             client_state.process_command(command, on_read_statuses);
         }
-
-        // Communicate with other threads
-        thread_communication.process_messages_from_other_threads(&mut receiver, &mut client_state)
     };
 
     // Handle errors
     if let Err(err) = main_loop_result {
         match err {
-            ReceiveCommandError::CommandParseError(_command_err) => {
+            CommunicationError::CommandParseError(_command_err) => {
                 println!("Failed to parse commands from client")
             }
-            ReceiveCommandError::IoError(io_err) => {
+            CommunicationError::IoError(io_err) => {
                 println!("Failed to receive commands from client: {}", io_err)
             }
-            ReceiveCommandError::ClientDisconnected => {}
+            CommunicationError::ClientDisconnected => {}
         }
     }
 

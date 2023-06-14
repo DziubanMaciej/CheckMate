@@ -1,4 +1,4 @@
-use check_mate_common::{ReceiveCommandError, ServerCommand};
+use check_mate_common::ServerCommand;
 use std::io::BufRead;
 
 pub struct ClientState<'a, T: BufRead> {
@@ -25,25 +25,8 @@ impl<'a, T: BufRead> ClientState<'a, T> {
         self.name.clone().unwrap_or("<Unknown>".to_owned())
     }
 
-    pub fn receive_command(&mut self) -> Result<Option<ServerCommand>, ReceiveCommandError> {
-        let buffer = self.input_stream.fill_buf();
-        let buffer = match buffer {
-            Ok(x) => x,
-            Err(err) => {
-                if err.kind() == std::io::ErrorKind::WouldBlock {
-                    return Ok(None);
-                } else {
-                    return Err(ReceiveCommandError::from(err));
-                }
-            }
-        };
-        if buffer.len() == 0 {
-            return Err(ReceiveCommandError::ClientDisconnected);
-        }
-
-        let parse_result = ServerCommand::from_bytes(buffer)?;
-        self.input_stream.consume(parse_result.bytes_used);
-        Ok(Some(parse_result.command))
+    pub fn get_input_stream(&mut self) -> &mut T {
+        self.input_stream
     }
 
     pub fn process_command<ReadStatusesCb: FnMut(bool)>(

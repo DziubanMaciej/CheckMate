@@ -29,3 +29,48 @@ pub fn fetch_arg<T: Iterator<Item = String>>(
         None => return Err(on_error),
     }
 }
+
+pub fn fetch_arg_u16<T, U, V>(
+    args: &mut T,
+    on_fetch_error: U,
+    on_conversion_error: V,
+) -> Result<u16, CommandLineError>
+where
+    T: Iterator<Item = String>,
+    U: Fn() -> CommandLineError,
+    V: Fn(&str) -> CommandLineError,
+{
+    let arg = match args.next() {
+        Some(x) => x,
+        None => return Err(on_fetch_error()),
+    };
+
+    let arg = match arg.parse::<u16>() {
+        Ok(x) => x,
+        Err(_) => return Err(on_conversion_error(&arg)),
+    };
+
+    Ok(arg)
+}
+
+pub fn fetch_arg_string<T, U, V>(
+    args: &mut T,
+    on_fetch_error: U,
+    on_empty_string: V,
+) -> Result<String, CommandLineError>
+where
+    T: Iterator<Item = String>,
+    U: Fn() -> CommandLineError,
+    V: Fn() -> CommandLineError,
+{
+    let arg = match args.next() {
+        Some(x) => x,
+        None => return Err(on_fetch_error()),
+    };
+
+    if arg.is_empty() {
+        return Err(on_empty_string());
+    }
+
+    Ok(arg)
+}

@@ -1,5 +1,7 @@
 use crate::action::Action;
-use check_mate_common::{fetch_arg, CommandLineError, DEFAULT_PORT};
+use check_mate_common::{
+    fetch_arg, fetch_arg_string, fetch_arg_u16, CommandLineError, DEFAULT_PORT,
+};
 
 #[derive(PartialEq, Debug)]
 pub struct Config {
@@ -63,39 +65,18 @@ impl Config {
 
             match arg.as_ref() {
                 "-p" => {
-                    // TODO create functions like fetch_arg_u16, fetch_arg_string, etc.
-                    let port =
-                        fetch_arg(args, CommandLineError::NoValueSpecified("port".into(), arg))?;
-                    let port = match port.parse::<u16>() {
-                        Ok(x) => x,
-                        Err(_) => return Err(CommandLineError::InvalidValue("port".into(), port)),
-                    };
-                    self.server_port = port;
+                    self.server_port = fetch_arg_u16(
+                        args,
+                        || CommandLineError::NoValueSpecified("port".into(), arg.clone()),
+                        |value| CommandLineError::InvalidValue("port".into(), value.into()),
+                    )?;
                 }
                 "-n" => {
-                    let name = fetch_arg(
+                    self.client_name = Some(fetch_arg_string(
                         args,
-                        CommandLineError::NoValueSpecified("client name".into(), arg.clone()),
-                    )?;
-                    if name == "" {
-                        return Err(CommandLineError::NoValueSpecified(
-                            "client name".into(),
-                            arg,
-                        ));
-                    }
-                    self.client_name = Some(name);
-                }
-                "--args" => {
-                    if let Action::WatchCommand(_, ref mut command_args) = self.action {
-                        loop {
-                            match args.next() {
-                                Some(x) => command_args.push(x),
-                                None => break,
-                            };
-                        }
-                    } else {
-                        return Err(CommandLineError::InvalidArgument(arg));
-                    }
+                        || CommandLineError::NoValueSpecified("client name".into(), arg.clone()),
+                        || CommandLineError::NoValueSpecified("client name".into(), arg.clone()),
+                    )?);
                 }
                 _ => return Err(CommandLineError::InvalidArgument(arg)),
             }

@@ -53,6 +53,28 @@ where
     Ok(arg)
 }
 
+pub fn fetch_arg_bool<T, U, V>(
+    args: &mut T,
+    on_fetch_error: U,
+    on_conversion_error: V,
+) -> Result<bool, CommandLineError>
+where
+    T: Iterator<Item = String>,
+    U: Fn() -> CommandLineError,
+    V: Fn(&str) -> CommandLineError,
+{
+    let arg = match args.next() {
+        Some(x) => x,
+        None => return Err(on_fetch_error()),
+    };
+
+    match arg.as_ref() {
+        "0" | "false" => Ok(false),
+        "1" | "true" => Ok(true),
+        _ => Err(on_conversion_error(&arg)),
+    }
+}
+
 pub fn fetch_arg_string<T, U, V>(
     args: &mut T,
     on_fetch_error: U,

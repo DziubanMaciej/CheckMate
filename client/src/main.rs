@@ -74,7 +74,9 @@ fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std
     }
 
     match &config.action {
-        Action::ReadMessages => read_messages_from_server(tcp_stream),
+        Action::ReadMessages(include_names) => {
+            read_messages_from_server(tcp_stream, *include_names)
+        }
         Action::WatchCommand(command, command_args) => {
             watch_command(tcp_stream, command, command_args)
         }
@@ -83,8 +85,11 @@ fn execute_action(config: &Config, tcp_stream: &mut TcpStream) -> Result<(), std
     }
 }
 
-fn read_messages_from_server(tcp_stream: &mut TcpStream) -> Result<(), std::io::Error> {
-    send_command(tcp_stream, ServerCommand::GetStatuses).unwrap(); // TODO remove unwrap
+fn read_messages_from_server(
+    tcp_stream: &mut TcpStream,
+    include_names: bool,
+) -> Result<(), std::io::Error> {
+    send_command(tcp_stream, ServerCommand::GetStatuses(include_names)).unwrap(); // TODO remove unwrap
     match receive_command(tcp_stream).unwrap() {
         // TODO remove unwrap
         ServerCommand::Statuses(statuses) => {

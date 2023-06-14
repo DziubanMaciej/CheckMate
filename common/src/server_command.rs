@@ -6,7 +6,7 @@ pub enum ServerCommand {
     Abort,
     SetStatusOk,
     SetStatusError(String),
-    GetStatuses,
+    GetStatuses(bool),
     RefreshClientByName(String),
     SetName(String),
     Statuses(Vec<String>),
@@ -16,6 +16,7 @@ pub enum ServerCommand {
 pub enum ServerCommandError {
     TooFewBytes,
     InvalidStringEncoding,
+    InvalidBoolean,
     UnknownCommand,
 }
 
@@ -43,6 +44,14 @@ impl ServerCommand {
             } else {
                 *index += count;
                 Ok(&bytes[*index - count..*index])
+            }
+        };
+        let take_bool = |index: &mut usize| -> Result<bool, ServerCommandError> {
+            let b = take_bytes(index, 1)?;
+            match b[0] {
+                0 => Ok(false),
+                1 => Ok(true),
+                _ => Err(ServerCommandError::InvalidBoolean),
             }
         };
         let take_dword = |index: &mut usize| -> Result<u32, ServerCommandError> {
@@ -73,7 +82,9 @@ impl ServerCommand {
             ServerCommand::ID_SET_STATUS_ERROR => {
                 ServerCommand::SetStatusError(take_string(&mut bytes_used)?)
             }
-            ServerCommand::ID_GET_STATUSES => ServerCommand::GetStatuses,
+            ServerCommand::ID_GET_STATUSES => {
+                ServerCommand::GetStatuses(take_bool(&mut bytes_used)?)
+            }
             ServerCommand::ID_REFRESH_CLIENT_BY_NAME => {
                 ServerCommand::RefreshClientByName(take_string(&mut bytes_used)?)
             }
@@ -101,16 +112,23 @@ impl ServerCommand {
             bytes.extend_from_slice(&string_len);
             bytes.extend_from_slice(&string_bytes);
         }
+        fn append_bool(bytes: &mut Vec<u8>, bool: &bool) {
+            bytes.push(*bool as u8);
+        }
 
         match self {
             ServerCommand::Abort => vec![ServerCommand::ID_ABORT],
             ServerCommand::SetStatusOk => vec![ServerCommand::ID_SET_STATUS_OK],
             ServerCommand::SetStatusError(message) => {
                 let mut result = vec![ServerCommand::ID_SET_STATUS_ERROR];
-                append_string(&mut result, &message);
+                append_string(&mut result, message);
                 result
             }
-            ServerCommand::GetStatuses => vec![ServerCommand::ID_GET_STATUSES],
+            ServerCommand::GetStatuses(include_names) => {
+                let mut result = vec![ServerCommand::ID_GET_STATUSES];
+                append_bool(&mut result, include_names);
+                result
+            }
             ServerCommand::RefreshClientByName(name) => {
                 let mut result = vec![ServerCommand::ID_REFRESH_CLIENT_BY_NAME];
                 append_string(&mut result, &name);
@@ -148,6 +166,10 @@ mod tests {
 
     fn get_expected_command_length_no_data() -> usize {
         1
+    }
+
+    fn get_expected_command_length_bool() -> usize {
+        get_expected_command_length_no_data() + 1
     }
 
     fn get_expected_command_length_string(s: &str) -> usize {
@@ -197,11 +219,22 @@ mod tests {
 
     #[test]
     fn command_get_statuses_is_serialized() {
-        let command = ServerCommand::GetStatuses;
-        let bytes = command.to_bytes();
-        let parse_result = ServerCommand::from_bytes(&bytes).expect("Command should deserialize");
-        assert_eq!(parse_result.command, command);
-        assert_eq!(parse_result.bytes_used, 1);
+        {
+            let command = ServerCommand::GetStatuses(false);
+            let bytes = command.to_bytes();
+            let parse_result =
+                ServerCommand::from_bytes(&bytes).expect("Command should deserialize");
+            assert_eq!(parse_result.command, command);
+            assert_eq!(parse_result.bytes_used, get_expected_command_length_bool());
+        }
+        {
+            let command = ServerCommand::GetStatuses(true);
+            let bytes = command.to_bytes();
+            let parse_result =
+                ServerCommand::from_bytes(&bytes).expect("Command should deserialize");
+            assert_eq!(parse_result.command, command);
+            assert_eq!(parse_result.bytes_used, get_expected_command_length_bool());
+        }
     }
 
     #[test]
@@ -241,6 +274,16 @@ mod tests {
             parse_result.bytes_used,
             get_expected_command_length_string_vec(&statuses)
         );
+    }
+
+    #[test]
+    fn command_get_statuses_with_invalid_bool_should_fail() {
+        let command = ServerCommand::GetStatuses(false);
+        let mut bytes = command.to_bytes();
+        bytes[1] = 2;
+        let err = ServerCommand::from_bytes(&bytes)
+            .expect_err("GetStatuses command with invalid bool should not be deserialized");
+        assert_eq!(err, ServerCommandError::InvalidBoolean);
     }
 
     #[test]

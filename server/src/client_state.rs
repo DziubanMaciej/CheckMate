@@ -20,7 +20,8 @@ impl<'a, T: BufRead> ClientState<'a, T> {
         &self.status
     }
 
-    fn get_name_for_logging(&self) -> String {
+    pub fn get_name_for_logging(&self) -> String {
+        // TODO rename
         self.name.clone().unwrap_or("<Unknown>".to_owned())
     }
 
@@ -45,7 +46,7 @@ impl<'a, T: BufRead> ClientState<'a, T> {
         Ok(Some(parse_result.command))
     }
 
-    pub fn process_command<ReadStatusesCb: FnMut()>(
+    pub fn process_command<ReadStatusesCb: FnMut(bool)>(
         &mut self,
         command: ServerCommand,
         mut on_read_statuses: ReadStatusesCb,
@@ -75,7 +76,7 @@ impl<'a, T: BufRead> ClientState<'a, T> {
                     );
                 }
             }
-            ServerCommand::GetStatuses => on_read_statuses(),
+            ServerCommand::GetStatuses(include_names) => on_read_statuses(include_names),
             ServerCommand::RefreshClientByName(_) => panic!("Not implemented command"),
             ServerCommand::SetName(name) => {
                 println!("Name set to {}", name);

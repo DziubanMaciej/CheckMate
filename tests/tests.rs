@@ -50,6 +50,27 @@ fn read_messages_with_single_client_works() {
 }
 
 #[test]
+fn read_messages_with_names_works() {
+    let port = get_port_number();
+    let _server = Subprocess::start_server("server", port);
+    let _client_watcher1 =
+        Subprocess::start_client("client_watcher1", port, &["watch", "echo", "error1"]);
+    let _client_watcher2 = Subprocess::start_client(
+        "client_watcher2",
+        port,
+        &["watch", "echo", "error2", "--", "-n", "client2"],
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    let mut client_reader = Subprocess::start_client("client_reader", port, &["read", "-i", "1"]);
+    let client_reader_out = client_reader.wait_and_get_output(true);
+
+    let lines: Vec<&str> = client_reader_out.lines().collect();
+    assert!(lines.contains(&"<Unknown>: error1")); // TODO this does not check that no other lines are printed.
+    assert!(lines.contains(&"client2: error2"));
+}
+
+#[test]
 fn read_messages_with_multiple_clients_works() {
     let port = get_port_number();
     let _server = Subprocess::start_server("server", port);
@@ -72,7 +93,6 @@ fn read_messages_with_multiple_clients_works() {
         ],
     );
 
-    println!("PORT: {port}");
     std::thread::sleep(std::time::Duration::from_millis(50));
     let mut client_reader = Subprocess::start_client("client_reader", port, &["read"]);
     let client_reader_out = client_reader.wait_and_get_output(true);

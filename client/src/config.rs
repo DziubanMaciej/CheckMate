@@ -1,6 +1,6 @@
 use crate::action::Action;
 use check_mate_common::{
-    fetch_arg, fetch_arg_string, fetch_arg_u16, CommandLineError, DEFAULT_PORT,
+    fetch_arg, fetch_arg_bool, fetch_arg_string, fetch_arg_u16, CommandLineError, DEFAULT_PORT,
 };
 
 #[derive(PartialEq, Debug)]
@@ -20,7 +20,7 @@ impl Config {
             CommandLineError::NoValueSpecified("action".to_owned(), "binary name".to_owned()),
         )?;
         let action = match action.as_ref() {
-            "read" => Action::ReadMessages,
+            "read" => Action::ReadMessages(false),
             "watch" => {
                 let command = fetch_arg(
                     args,
@@ -78,6 +78,24 @@ impl Config {
                         || CommandLineError::NoValueSpecified("client name".into(), arg.clone()),
                     )?);
                 }
+                "-i" => {
+                    let include_names = match self.action {
+                        Action::ReadMessages(ref mut include_names) => include_names,
+                        _ => return Err(CommandLineError::InvalidArgument(arg)),
+                    };
+                    *include_names = fetch_arg_bool(
+                        args,
+                        || {
+                            CommandLineError::NoValueSpecified(
+                                "a boolean value".into(),
+                                arg.clone(),
+                            )
+                        },
+                        |value| {
+                            CommandLineError::InvalidValue("include names".into(), value.into())
+                        },
+                    )?;
+                }
                 _ => return Err(CommandLineError::InvalidArgument(arg)),
             }
         }
@@ -118,11 +136,47 @@ mod tests {
         let config = config.expect("Parsing should succeed");
 
         let expected = Config {
-            action: Action::ReadMessages,
+            action: Action::ReadMessages(false),
             server_port: DEFAULT_PORT,
             client_name: None,
         };
         assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn read_action_with_include_names_argument_is_parsed() {
+        fn run(include_names: &str, include_names_bool: bool) {
+            let args = ["read", "-i", include_names];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let config = config.expect("Parsing should succeed");
+
+            let expected = Config {
+                action: Action::ReadMessages(include_names_bool),
+                server_port: DEFAULT_PORT,
+                client_name: None,
+            };
+            assert_eq!(config, expected);
+        }
+        run("0", false);
+        run("false", false);
+        run("1", true);
+        run("true", true);
+    }
+
+    #[test]
+    fn read_action_with_invalid_include_names_argument_should_fail() {
+        fn run(include_names: &str) {
+            let args = ["read", "-i", include_names];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let err = config.expect_err("Parsing should fail");
+            let expected =
+                CommandLineError::InvalidValue("include names".into(), include_names.into());
+            assert_eq!(err, expected);
+        }
+        run("aa");
+        run("");
+        run("1.");
+        run("1 .");
     }
 
     #[test]

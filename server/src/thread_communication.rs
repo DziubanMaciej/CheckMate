@@ -19,7 +19,7 @@
 
 use crate::client_state::ClientState;
 use std::io::BufRead;
-use std::ops::{DerefMut};
+use std::ops::DerefMut;
 use std::{
     collections::HashMap,
     sync::{mpsc, Arc, Mutex},
@@ -41,7 +41,7 @@ struct PerThreadData {
 #[derive(Clone)]
 pub enum ThreadMessage {
     ReadMessageRequest(ThreadId),
-    ReadMessageResponse(Result<(), String>),
+    ReadMessageResponse(Result<(), String>, String),
     // Refresh,
     // Abort,
 }
@@ -86,12 +86,12 @@ impl ThreadCommunication {
             };
 
             match message {
-                ThreadMessage::ReadMessageResponse(_) => panic!("Unexpected message"),
+                ThreadMessage::ReadMessageResponse(_, _) => panic!("Unexpected message"),
                 ThreadMessage::ReadMessageRequest(sender_id) => {
                     let mut lock = self.locked_data.lock().unwrap();
                     let mut data = lock.deref_mut();
                     let message =
-                        ThreadMessage::ReadMessageResponse(client_state.get_status().clone());
+                        ThreadMessage::ReadMessageResponse(client_state.get_status().clone(), client_state.get_name_for_logging());
 
                     Self::unicast(&mut data, sender_id, message)
                 }
@@ -101,7 +101,11 @@ impl ThreadCommunication {
         }
     }
 
-    pub fn read_messages(&self, receiver: &mpsc::Receiver<ThreadMessage>) -> Vec<String> {
+    pub fn read_messages(
+        &self,
+        receiver: &mpsc::Receiver<ThreadMessage>,
+        include_names: bool,
+    ) -> Vec<String> {
         let mut data: PerThreadDataMap;
         {
             // Clone the metadata about threads, so we can release the lock
@@ -124,9 +128,14 @@ impl ThreadCommunication {
         let result = Self::collect(&mut data, &mut thread_ids_to_remove, receiver)
             .into_iter()
             .filter_map(|message| match message {
-                ThreadMessage::ReadMessageResponse(status) => match status {
+                ThreadMessage::ReadMessageResponse(status, name) => match status {
                     Ok(_) => None,
-                    Err(x) => Some(x),
+                    Err(mut status_string) => {
+                        if include_names {
+                            status_string = format!("{}: {}", name, status_string);
+                        }
+                        Some(status_string)
+                    }
                 },
                 _ => panic!("Unexpected message received"),
             })

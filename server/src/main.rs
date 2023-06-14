@@ -37,8 +37,8 @@ fn handle_client(mut thread_communication: ThreadCommunication, tcp_stream: TcpS
 
     // Main loop
     let main_loop_result: Result<(), ReceiveCommandError> = loop {
-        let on_read_statuses = || {
-            let errors = thread_communication.read_messages(&receiver);
+        let on_read_statuses = |include_names: bool| {
+            let errors = thread_communication.read_messages(&receiver, include_names);
             let command = ServerCommand::Statuses(errors);
             let _send_result = send_command(&mut output_stream, command); // ignore result - if it failed, client must have died
         };

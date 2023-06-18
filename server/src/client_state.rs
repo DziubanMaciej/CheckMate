@@ -1,16 +1,18 @@
 use check_mate_common::ServerCommand;
-use std::io::BufRead;
 
-pub struct ClientState<'a, T: BufRead> {
-    input_stream: &'a mut T,
+pub struct ClientState {
     name: Option<String>,
     status: Result<(), String>,
 }
 
-impl<'a, T: BufRead> ClientState<'a, T> {
-    pub fn new(input_stream: &'a mut T) -> Self {
+pub enum ProcessCommandResult {
+    Ok,
+    GetStatuses(bool),
+}
+
+impl ClientState {
+    pub fn new() -> Self {
         ClientState {
-            input_stream: input_stream,
             name: None,
             status: Ok(()),
         }
@@ -25,15 +27,7 @@ impl<'a, T: BufRead> ClientState<'a, T> {
         self.name.clone().unwrap_or("<Unknown>".to_owned())
     }
 
-    pub fn get_input_stream(&mut self) -> &mut T {
-        self.input_stream
-    }
-
-    pub fn process_command<ReadStatusesCb: FnMut(bool)>(
-        &mut self,
-        command: ServerCommand,
-        mut on_read_statuses: ReadStatusesCb,
-    ) {
+    pub fn process_command(&mut self, command: ServerCommand) -> ProcessCommandResult {
         match command {
             ServerCommand::Abort => {
                 println!("Received abort command");
@@ -59,13 +53,17 @@ impl<'a, T: BufRead> ClientState<'a, T> {
                     );
                 }
             }
-            ServerCommand::GetStatuses(include_names) => on_read_statuses(include_names),
+            ServerCommand::GetStatuses(include_names) => {
+                return ProcessCommandResult::GetStatuses(include_names)
+            }
             ServerCommand::RefreshClientByName(_) => panic!("Not implemented command"),
             ServerCommand::SetName(name) => {
                 println!("Name set to {}", name);
                 self.name = Some(name);
             }
-            ServerCommand::Statuses(_) => panic!("Unexpected message received"),
+            ServerCommand::Statuses(_) => panic!("Unexpected server command"),
         };
+
+        ProcessCommandResult::Ok
     }
 }

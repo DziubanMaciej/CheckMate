@@ -44,9 +44,29 @@ fn read_messages_with_single_client_works() {
     );
 
     std::thread::sleep(std::time::Duration::from_millis(50));
+
     let mut client_reader = Subprocess::start_client("client_reader", port, &["read"]);
     let client_reader_out = client_reader.wait_and_get_output(true);
     assert_eq!(client_reader_out, "some nice error\n");
+}
+
+#[test]
+#[ignore = "Enable when client can have decreased backoff time for connecting to server"]
+fn client_reconnects_when_server_restarts() {
+    let port = get_port_number();
+    let _client_watcher =
+        Subprocess::start_client("client_watcher", port, &["watch", "echo", "My fail"]);
+
+    for i in 0..2 {
+        let mut server = Subprocess::start_server(&format!("server{i}"), port);
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        server.kill();
+        let server_out = server.wait_and_get_output(false);
+        eprintln!("XDDDDDDDDDDDDDDDDDDDDDD: >{server_out}<");
+        server_out
+        .lines()
+        .seek("Client <Unknown> has error: My fail");
+    }
 }
 
 #[test]

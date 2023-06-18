@@ -11,6 +11,13 @@ pub enum Action {
 }
 
 impl Action {
+    pub fn should_reconnect(&self) -> bool {
+        match self {
+            Self::WatchCommand(_, _) => true,
+            _ => false,
+        }
+    }
+
     pub fn execute<T>(
         &self,
         tcp_stream: &mut T,
@@ -74,7 +81,7 @@ impl Action {
                 ServerCommand::SetStatusError(command_output)
             };
 
-            server_command.send(output_stream, true)?;
+            server_command.send(output_stream, false)?;
             std::thread::sleep(std::time::Duration::from_millis(500)); // TODO make this a parameter
         }
     }

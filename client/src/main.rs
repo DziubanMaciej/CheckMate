@@ -2,6 +2,7 @@ use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
 mod action;
 mod config;
 
+use check_mate_common::CommunicationError;
 use config::Config;
 
 fn connect_to_server(server_address: SocketAddrV4) -> TcpStream {
@@ -29,10 +30,23 @@ fn main() {
     };
 
     let server_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);
-    let mut tcp_stream = connect_to_server(server_address);
-    let action_result = config.action.execute(&mut tcp_stream, &config.client_name);
-    if let Err(err) = action_result {
-        eprintln!("ERROR: {}", err);
-        std::process::exit(1);
+
+    loop {
+        let mut tcp_stream = connect_to_server(server_address);
+        let action_result = config.action.execute(&mut tcp_stream, &config.client_name);
+
+        if let Err(err) = action_result {
+            match err {
+                CommunicationError::ClientDisconnected => (),
+                _ => {
+                    eprintln!("ERROR: {}", err);
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        if !config.action.should_reconnect() {
+            break;
+        }
     }
 }

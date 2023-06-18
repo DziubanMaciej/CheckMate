@@ -57,14 +57,23 @@ impl Subprocess {
         }
         String::from_utf8(out.stdout).expect("Server stdout should be available")
     }
+
+    pub fn kill(&mut self) {
+        match &mut self.child {
+            Some(child) => {
+                if child.kill().is_err() {
+                    panic!("{} shoud be killable", self.name);
+                }
+            }
+            None => panic!("{} has already been killed", self.name),
+        }
+    }
 }
 
 impl Drop for Subprocess {
     fn drop(&mut self) {
-        if let Some(ref mut child) = &mut self.child {
-            if child.kill().is_err() {
-                panic!("{} shoud be killable", self.name);
-            }
+        if self.child.is_some() {
+            self.kill();
         }
     }
 }

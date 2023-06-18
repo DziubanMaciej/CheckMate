@@ -174,7 +174,7 @@ impl ServerCommand {
                 eprintln!("Failed to write to tcp stream {}", err);
                 std::process::exit(1);
             } else {
-                return Err(err.into());
+                return Err(CommunicationError::ClientDisconnected);
             }
         }
 

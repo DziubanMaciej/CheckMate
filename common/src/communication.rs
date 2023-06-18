@@ -6,7 +6,7 @@ use crate::server_command::ServerCommandError;
 pub enum CommunicationError {
     IoError(std::io::Error),
     CommandParseError(ServerCommandError),
-    ClientDisconnected,
+    ClientDisconnected, // TODO rename to SocketDisconnected
 }
 
 impl From<std::io::Error> for CommunicationError {

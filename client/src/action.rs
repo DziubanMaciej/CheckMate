@@ -5,15 +5,30 @@ use check_mate_common::{CommunicationError, ServerCommand};
 #[derive(PartialEq, Debug)]
 pub enum Action {
     ReadMessages(bool),
-    WatchCommand(String, Vec<String>),
+    WatchCommand(WatchCommandData),
     RefreshClientByName(String),
     Abort,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct WatchCommandData {
+    pub command: String,
+    pub command_args: Vec<String>,
+}
+
+impl WatchCommandData {
+    pub fn new(command: String, command_args: Vec<String>) -> Self {
+        Self {
+            command,
+            command_args,
+        }
+    }
 }
 
 impl Action {
     pub fn should_reconnect(&self) -> bool {
         match self {
-            Self::WatchCommand(_, _) => true,
+            Self::WatchCommand(_) => true,
             _ => false,
         }
     }
@@ -33,8 +48,8 @@ impl Action {
 
         match self {
             Action::ReadMessages(include_names) => Self::read(tcp_stream, *include_names),
-            Action::WatchCommand(command, command_args) => {
-                Self::watch(tcp_stream, command, command_args)
+            Action::WatchCommand(data) => {
+                Self::watch(tcp_stream, &data.command, &data.command_args)
             }
             Action::RefreshClientByName(name) => Self::refresh_client_by_name(tcp_stream, name),
             Action::Abort => Self::abort(tcp_stream),

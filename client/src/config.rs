@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::action::Action;
+use crate::action::{Action, WatchCommandData};
 use check_mate_common::{
     fetch_arg, fetch_arg_and_parse, fetch_arg_bool, fetch_arg_string, CommandLineError,
     DEFAULT_CONNECTION_BACKOFF, DEFAULT_PORT,
@@ -42,7 +42,7 @@ impl Config {
                         break; // no more args
                     }
                 }
-                Action::WatchCommand(command, command_args)
+                Action::WatchCommand(WatchCommandData::new(command, command_args))
             }
             "refresh" => {
                 let name = fetch_arg(
@@ -209,7 +209,8 @@ mod tests {
         let config = config.expect("Parsing should succeed");
 
         let mut expected = Config::default();
-        expected.action = Action::WatchCommand("whoami".to_string(), Vec::new());
+        expected.action =
+            Action::WatchCommand(WatchCommandData::new("whoami".to_string(), Vec::new()));
         assert_eq!(config, expected);
     }
 
@@ -220,7 +221,8 @@ mod tests {
         let config = config.expect("Parsing should succeed");
 
         let mut expected = Config::default();
-        expected.action = Action::WatchCommand("whoami".to_string(), Vec::new());
+        expected.action =
+            Action::WatchCommand(WatchCommandData::new("whoami".to_string(), Vec::new()));
         assert_eq!(config, expected);
     }
 
@@ -231,10 +233,10 @@ mod tests {
         let config = config.expect("Parsing should succeed");
 
         let mut expected = Config::default();
-        expected.action = Action::WatchCommand(
+        expected.action = Action::WatchCommand(WatchCommandData::new(
             "whoami".to_string(),
             vec!["hello".to_string(), "world".to_string()],
-        );
+        ));
         assert_eq!(config, expected);
     }
 
@@ -245,10 +247,10 @@ mod tests {
         let config = config.expect("Parsing should succeed");
 
         let mut expected = Config::default();
-        expected.action = Action::WatchCommand(
+        expected.action = Action::WatchCommand(WatchCommandData::new(
             "whoami".to_string(),
             vec!["-p".to_string(), "101".to_string()],
-        );
+        ));
         expected.server_port = 100;
         assert_eq!(config, expected);
     }

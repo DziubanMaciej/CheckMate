@@ -1,6 +1,9 @@
+use std::time::Duration;
+
 use crate::action::Action;
 use check_mate_common::{
-    fetch_arg, fetch_arg_bool, fetch_arg_string, fetch_arg_u16, CommandLineError, DEFAULT_PORT,
+    fetch_arg, fetch_arg_and_parse, fetch_arg_bool, fetch_arg_string, CommandLineError,
+    DEFAULT_CONNECTION_BACKOFF, DEFAULT_PORT,
 };
 
 #[derive(PartialEq, Debug)]
@@ -8,6 +11,7 @@ pub struct Config {
     pub action: Action,
     pub server_port: u16,
     pub client_name: Option<String>,
+    pub server_connection_backoff: Duration,
 }
 
 impl Config {
@@ -65,7 +69,7 @@ impl Config {
 
             match arg.as_ref() {
                 "-p" => {
-                    self.server_port = fetch_arg_u16(
+                    self.server_port = fetch_arg_and_parse(
                         args,
                         || CommandLineError::NoValueSpecified("port".into(), arg.clone()),
                         |value| CommandLineError::InvalidValue("port".into(), value.into()),
@@ -96,6 +100,24 @@ impl Config {
                         },
                     )?;
                 }
+                "-c" => {
+                    let duration: u64 = fetch_arg_and_parse(
+                        args,
+                        || {
+                            CommandLineError::NoValueSpecified(
+                                "connection backoff".into(),
+                                arg.clone(),
+                            )
+                        },
+                        |value| {
+                            CommandLineError::InvalidValue(
+                                "connection backoff".into(),
+                                value.into(),
+                            )
+                        },
+                    )?;
+                    self.server_connection_backoff = Duration::from_millis(duration);
+                }
                 _ => return Err(CommandLineError::InvalidArgument(arg)),
             }
         }
@@ -106,14 +128,21 @@ impl Config {
     where
         T: Iterator<Item = String>,
     {
-        let action = Config::parse_action(&mut args)?;
-        let mut config = Config {
-            action: action,
-            server_port: DEFAULT_PORT,
-            client_name: None,
-        };
+        let mut config = Config::default();
+        config.action = Config::parse_action(&mut args)?;
         config.parse_extra_args(&mut args)?;
         Ok(config)
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            action: Action::Abort,
+            server_port: DEFAULT_PORT,
+            client_name: None,
+            server_connection_backoff: DEFAULT_CONNECTION_BACKOFF,
+        }
     }
 }
 
@@ -135,11 +164,8 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::ReadMessages(false),
-            server_port: DEFAULT_PORT,
-            client_name: None,
-        };
+        let mut expected = Config::default();
+        expected.action = Action::ReadMessages(false);
         assert_eq!(config, expected);
     }
 
@@ -150,11 +176,8 @@ mod tests {
             let config = Config::parse(to_owned_string_iter(&args));
             let config = config.expect("Parsing should succeed");
 
-            let expected = Config {
-                action: Action::ReadMessages(include_names_bool),
-                server_port: DEFAULT_PORT,
-                client_name: None,
-            };
+            let mut expected = Config::default();
+            expected.action = Action::ReadMessages(include_names_bool);
             assert_eq!(config, expected);
         }
         run("0", false);
@@ -185,11 +208,8 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::WatchCommand("whoami".to_string(), Vec::new()),
-            server_port: DEFAULT_PORT,
-            client_name: None,
-        };
+        let mut expected = Config::default();
+        expected.action = Action::WatchCommand("whoami".to_string(), Vec::new());
         assert_eq!(config, expected);
     }
 
@@ -199,11 +219,8 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::WatchCommand("whoami".to_string(), Vec::new()),
-            server_port: DEFAULT_PORT,
-            client_name: None,
-        };
+        let mut expected = Config::default();
+        expected.action = Action::WatchCommand("whoami".to_string(), Vec::new());
         assert_eq!(config, expected);
     }
 
@@ -213,14 +230,11 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::WatchCommand(
-                "whoami".to_string(),
-                vec!["hello".to_string(), "world".to_string()],
-            ),
-            server_port: DEFAULT_PORT,
-            client_name: None,
-        };
+        let mut expected = Config::default();
+        expected.action = Action::WatchCommand(
+            "whoami".to_string(),
+            vec!["hello".to_string(), "world".to_string()],
+        );
         assert_eq!(config, expected);
     }
 
@@ -230,14 +244,12 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::WatchCommand(
-                "whoami".to_string(),
-                vec!["-p".to_string(), "101".to_string()],
-            ),
-            server_port: 100,
-            client_name: None,
-        };
+        let mut expected = Config::default();
+        expected.action = Action::WatchCommand(
+            "whoami".to_string(),
+            vec!["-p".to_string(), "101".to_string()],
+        );
+        expected.server_port = 100;
         assert_eq!(config, expected);
     }
 
@@ -247,11 +259,8 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::RefreshClientByName("client12".to_string()),
-            server_port: DEFAULT_PORT,
-            client_name: None,
-        };
+        let mut expected = Config::default();
+        expected.action = Action::RefreshClientByName("client12".to_string());
         assert_eq!(config, expected);
     }
 
@@ -261,11 +270,8 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::Abort,
-            server_port: DEFAULT_PORT,
-            client_name: None,
-        };
+        let mut expected = Config::default();
+        expected.action = Action::Abort;
         assert_eq!(config, expected);
     }
 
@@ -275,11 +281,9 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::RefreshClientByName("client12".to_string()),
-            server_port: 10,
-            client_name: None,
-        };
+        let mut expected = Config::default();
+        expected.action = Action::RefreshClientByName("client12".to_string());
+        expected.server_port = 10;
         assert_eq!(config, expected);
     }
 
@@ -289,25 +293,37 @@ mod tests {
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::RefreshClientByName("client12".to_string()),
-            server_port: DEFAULT_PORT,
-            client_name: Some("client11".to_string()),
-        };
+        let mut expected = Config::default();
+        expected.action = Action::RefreshClientByName("client12".to_string());
+        expected.client_name = Some("client11".to_string());
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn server_connection_backoff_is_parsed() {
+        let args = ["refresh", "client12", "-c", "400"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let mut expected = Config::default();
+        expected.action = Action::RefreshClientByName("client12".to_string());
+        expected.server_connection_backoff = Duration::from_millis(400);
         assert_eq!(config, expected);
     }
 
     #[test]
     fn multiple_custom_args_are_parsed() {
-        let args = ["refresh", "client12", "-n", "client11", "-p", "120"];
+        let args = [
+            "refresh", "client12", "-n", "client11", "-p", "120", "-c", "400",
+        ];
         let config = Config::parse(to_owned_string_iter(&args));
         let config = config.expect("Parsing should succeed");
 
-        let expected = Config {
-            action: Action::RefreshClientByName("client12".to_string()),
-            server_port: 120,
-            client_name: Some("client11".to_string()),
-        };
+        let mut expected = Config::default();
+        expected.action = Action::RefreshClientByName("client12".to_string());
+        expected.server_port = 120;
+        expected.client_name = Some("client11".to_string());
+        expected.server_connection_backoff = Duration::from_millis(400);
         assert_eq!(config, expected);
     }
 
@@ -351,6 +367,17 @@ mod tests {
         let parse_error = config.expect_err("Parsing should not succeed");
 
         let expected = CommandLineError::NoValueSpecified("port".to_string(), "-p".to_string());
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn no_server_connection_backoff_error_is_returned() {
+        let args = ["read", "-c"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected =
+            CommandLineError::NoValueSpecified("connection backoff".to_string(), "-c".to_string());
         assert_eq!(parse_error, expected);
     }
 
@@ -412,6 +439,24 @@ mod tests {
             let expected = CommandLineError::InvalidValue("port".to_string(), "2000d".to_string());
             assert_eq!(parse_error, expected);
         }
+    }
+
+    #[test]
+    fn invalid_server_connection_backoff_error_is_returned() {
+        fn run(value: &str) {
+            let args = ["read", "-c", value];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let parse_error = config.expect_err("Parsing should not succeed");
+
+            let expected =
+                CommandLineError::InvalidValue("connection backoff".to_string(), value.to_string());
+            assert_eq!(parse_error, expected);
+        }
+        run(" ");
+        run("");
+        run("40f");
+        run("40 f");
+        run("abc");
     }
 
     #[test]

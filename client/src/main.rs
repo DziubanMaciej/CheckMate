@@ -1,17 +1,22 @@
-use std::net::{Ipv4Addr, SocketAddrV4, TcpStream};
+use std::{
+    net::{Ipv4Addr, SocketAddrV4, TcpStream},
+    time::Duration,
+};
 mod action;
 mod config;
 
 use check_mate_common::CommunicationError;
 use config::Config;
 
-fn connect_to_server(server_address: SocketAddrV4) -> TcpStream {
+fn connect_to_server(server_address: SocketAddrV4, connection_backoff: Duration) -> TcpStream {
     loop {
         let tcp_stream = match TcpStream::connect(server_address) {
             Ok(ok) => ok,
             Err(err) => {
                 eprintln!("Failed to connect with server: {}. Keep waiting.", err);
-                std::thread::sleep(std::time::Duration::from_millis(500)); // TODO make this a parameter
+                if !connection_backoff.is_zero() {
+                    std::thread::sleep(connection_backoff);
+                }
                 continue;
             }
         };
@@ -32,7 +37,7 @@ fn main() {
     let server_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);
 
     loop {
-        let mut tcp_stream = connect_to_server(server_address);
+        let mut tcp_stream = connect_to_server(server_address, config.server_connection_backoff);
         let action_result = config.action.execute(&mut tcp_stream, &config.client_name);
 
         if let Err(err) = action_result {

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 #[derive(PartialEq, Debug)]
 pub enum CommandLineError {
     NoValueSpecified(String, String),
@@ -30,22 +32,23 @@ pub fn fetch_arg<T: Iterator<Item = String>>(
     }
 }
 
-pub fn fetch_arg_u16<T, U, V>(
+pub fn fetch_arg_and_parse<Int, T, U, V>(
     args: &mut T,
     on_fetch_error: U,
     on_conversion_error: V,
-) -> Result<u16, CommandLineError>
+) -> Result<Int, CommandLineError>
 where
     T: Iterator<Item = String>,
     U: Fn() -> CommandLineError,
     V: Fn(&str) -> CommandLineError,
+    Int : FromStr,
 {
     let arg = match args.next() {
         Some(x) => x,
         None => return Err(on_fetch_error()),
     };
 
-    let arg = match arg.parse::<u16>() {
+    let arg = match arg.parse::<Int>() {
         Ok(x) => x,
         Err(_) => return Err(on_conversion_error(&arg)),
     };

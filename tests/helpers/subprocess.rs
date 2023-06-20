@@ -13,6 +13,7 @@ impl Subprocess {
             .arg("-p")
             .arg(port.to_string())
             .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
             .spawn()
             .expect("Server should start");
         std::thread::sleep(std::time::Duration::from_millis(50));
@@ -36,6 +37,7 @@ impl Subprocess {
             .args(args)
             .args(port_args)
             .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
             .spawn()
             .expect("Client should start");
 

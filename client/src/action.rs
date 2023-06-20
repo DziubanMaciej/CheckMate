@@ -1,6 +1,9 @@
-use std::io::{Read, Write};
-
-use check_mate_common::{CommunicationError, ServerCommand};
+use crate::config::Config;
+use check_mate_common::{CommunicationError, ServerCommand, DEFAULT_WATCH_INTERVAL};
+use std::{
+    io::{Read, Write},
+    time::Duration,
+};
 
 #[derive(PartialEq, Debug)]
 pub enum Action {
@@ -14,6 +17,7 @@ pub enum Action {
 pub struct WatchCommandData {
     pub command: String,
     pub command_args: Vec<String>,
+    pub interval: Duration,
 }
 
 impl WatchCommandData {
@@ -21,6 +25,7 @@ impl WatchCommandData {
         Self {
             command,
             command_args,
+            interval: DEFAULT_WATCH_INTERVAL,
         }
     }
 }
@@ -33,15 +38,11 @@ impl Action {
         }
     }
 
-    pub fn execute<T>(
-        &self,
-        tcp_stream: &mut T,
-        client_name: &Option<String>,
-    ) -> Result<(), CommunicationError>
+    pub fn execute<T>(&self, tcp_stream: &mut T, config: &Config) -> Result<(), CommunicationError>
     where
         T: Read + Write,
     {
-        if let Some(ref name) = client_name {
+        if let Some(ref name) = config.client_name {
             let command = ServerCommand::SetName(name.clone());
             command.send(tcp_stream, true)?;
         }
@@ -49,7 +50,7 @@ impl Action {
         match self {
             Action::ReadMessages(include_names) => Self::read(tcp_stream, *include_names),
             Action::WatchCommand(data) => {
-                Self::watch(tcp_stream, &data.command, &data.command_args)
+                Self::watch(tcp_stream, &data.command, &data.command_args, data.interval)
             }
             Action::RefreshClientByName(name) => Self::refresh_client_by_name(tcp_stream, name),
             Action::Abort => Self::abort(tcp_stream),
@@ -77,6 +78,7 @@ impl Action {
         output_stream: &mut T,
         command: &str,
         command_args: &Vec<String>,
+        interval : Duration,
     ) -> Result<(), CommunicationError>
     where
         T: Write,
@@ -97,7 +99,9 @@ impl Action {
             };
 
             server_command.send(output_stream, false)?;
-            std::thread::sleep(std::time::Duration::from_millis(500)); // TODO make this a parameter
+            if !interval.is_zero() {
+                std::thread::sleep(interval);
+            }
         }
     }
 

@@ -38,7 +38,7 @@ fn main() {
 
     loop {
         let mut tcp_stream = connect_to_server(server_address, config.server_connection_backoff);
-        let action_result = config.action.execute(&mut tcp_stream, &config.client_name);
+        let action_result = config.action.execute(&mut tcp_stream, &config);
 
         if let Err(err) = action_result {
             match err {

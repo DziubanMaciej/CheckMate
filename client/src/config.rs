@@ -100,6 +100,20 @@ impl Config {
                         },
                     )?;
                 }
+                "-w" => {
+                    let data = match self.action {
+                        Action::WatchCommand(ref mut data) => data,
+                        _ => return Err(CommandLineError::InvalidArgument(arg)),
+                    };
+                    let interval: u64 = fetch_arg_and_parse(
+                        args,
+                        || CommandLineError::NoValueSpecified("watch interval".into(), arg.clone()),
+                        |value| {
+                            CommandLineError::InvalidValue("watch interval".into(), value.into())
+                        },
+                    )?;
+                    data.interval = Duration::from_millis(interval);
+                }
                 "-c" => {
                     let duration: u64 = fetch_arg_and_parse(
                         args,
@@ -314,6 +328,19 @@ mod tests {
     }
 
     #[test]
+    fn watch_interval_is_parsed() {
+        let args = ["watch", "echo", "--", "-w", "123"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let mut expected = Config::default();
+        let mut watch_command_data = WatchCommandData::new("echo".into(), Vec::new());
+        watch_command_data.interval = Duration::from_millis(123);
+        expected.action = Action::WatchCommand(watch_command_data);
+        assert_eq!(config, expected);
+    }
+
+    #[test]
     fn multiple_custom_args_are_parsed() {
         let args = [
             "refresh", "client12", "-n", "client11", "-p", "120", "-c", "400",
@@ -380,6 +407,17 @@ mod tests {
 
         let expected =
             CommandLineError::NoValueSpecified("connection backoff".to_string(), "-c".to_string());
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn no_watch_interval_error_is_returned() {
+        let args = ["watch", "echo", "--", "-w"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected =
+            CommandLineError::NoValueSpecified("watch interval".to_string(), "-w".to_string());
         assert_eq!(parse_error, expected);
     }
 
@@ -462,6 +500,24 @@ mod tests {
     }
 
     #[test]
+    fn invalid_watch_interval_error_is_returned() {
+        fn run(value: &str) {
+            let args = ["watch", "echo", "--", "-w", value];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let parse_error = config.expect_err("Parsing should not succeed");
+
+            let expected =
+                CommandLineError::InvalidValue("watch interval".to_string(), value.to_string());
+            assert_eq!(parse_error, expected);
+        }
+        run(" ");
+        run("");
+        run("40f");
+        run("40 f");
+        run("abc");
+    }
+
+    #[test]
     fn invalid_argument_error_is_returned() {
         let args = ["read", "-k"];
         let config = Config::parse(to_owned_string_iter(&args));
@@ -469,6 +525,20 @@ mod tests {
 
         let expected = CommandLineError::InvalidArgument("-k".to_string());
         assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn command_specific_extra_args_return_error_when_used_with_wrong_command() {
+        let command_specific_args = [("-i", "1"), ("-w", "123")];
+
+        for (arg, value) in command_specific_args {
+            let args = ["abort", arg, value]; // abort is a command with no command-specific args, so we can use it here
+            let config = Config::parse(to_owned_string_iter(&args));
+            let parse_error = config.expect_err("Parsing should not succeed");
+
+            let expected = CommandLineError::InvalidArgument(arg.to_string());
+            assert_eq!(parse_error, expected);
+        }
     }
 }
 

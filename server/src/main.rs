@@ -5,7 +5,6 @@ mod task_communication;
 
 use check_mate_common::ServerCommand;
 use client_state::ClientState;
-use communication::receive_blocking_async;
 use config::Config;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use task_communication::{TaskCommunication, TaskMessage};
@@ -16,13 +15,15 @@ use tokio::{
     sync::mpsc::{channel, Receiver, Sender},
 };
 
+use crate::communication::receive_blocking_async;
+
 async fn execute_command_from_client(
     task_id: usize,
     client_state: &mut ClientState,
     receiver: &mut Receiver<TaskMessage>,
     sender: &Sender<TaskMessage>,
     task_communication: &mut TaskCommunication,
-    stream: &mut (impl AsyncWrite + Unpin),
+
     command: ServerCommand,
 ) {
     let process_command_result = client_state.process_command(command);
@@ -30,16 +31,24 @@ async fn execute_command_from_client(
         let errors = task_communication
             .read_messages(task_id, receiver, sender, include_names)
             .await;
-        let command = ServerCommand::Statuses(errors);
-        let command_bytes = command.to_bytes();
+        client_state
+            .push_command_to_send(ServerCommand::Statuses(errors))
+            .await;
+    }
+}
 
-        let send_result = stream.write(&command_bytes[0..]).await;
-        if let Err(_) = send_result {
-            eprintln!(
-                "Client {} got disconnected",
-                client_state.get_name_for_logging()
-            );
-        }
+async fn send_command_to_client(
+    command: ServerCommand,
+    client_state: &mut ClientState,
+    stream: &mut (impl AsyncWrite + Unpin),
+) {
+    let command_bytes = command.to_bytes();
+    let send_result = stream.write(&command_bytes[0..]).await;
+    if let Err(_) = send_result {
+        eprintln!(
+            "Client {} got disconnected",
+            client_state.get_name_for_logging()
+        );
     }
 }
 
@@ -67,7 +76,7 @@ async fn handle_client_async(
         tokio::select! {
             command = receive_blocking_async(&mut input_stream) => {
                 match command {
-                    Ok(x) => execute_command_from_client(task_id, &mut client_state, &mut receiver, &sender, &mut task_communication, &mut output_stream, x).await,
+                    Ok(x) => execute_command_from_client(task_id, &mut client_state, &mut receiver, &sender, &mut task_communication, x).await,
                     Err(x) => break x,
                 };
             }
@@ -76,6 +85,9 @@ async fn handle_client_async(
                     Some(x) => task_communication.process_task_message(x, &client_state).await,
                     None => todo!(), // TODO what does it mean?
                 }
+            }
+            command = client_state.get_command_to_send() => {
+                send_command_to_client(command, &mut client_state, &mut output_stream).await;
             }
         }
     };

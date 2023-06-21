@@ -1,8 +1,10 @@
 use check_mate_common::ServerCommand;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub struct ClientState {
     name: Option<String>,
     status: Result<(), String>,
+    messages_to_send_queue: (Sender<ServerCommand>, Receiver<ServerCommand>),
 }
 
 pub enum ProcessCommandResult {
@@ -15,6 +17,7 @@ impl ClientState {
         ClientState {
             name: None,
             status: Ok(()),
+            messages_to_send_queue: channel(2),
         }
     }
 
@@ -25,6 +28,14 @@ impl ClientState {
     pub fn get_name_for_logging(&self) -> String {
         // TODO rename
         self.name.clone().unwrap_or("<Unknown>".to_owned())
+    }
+
+    pub async fn push_command_to_send(&mut self, command: ServerCommand) {
+        self.messages_to_send_queue.0.send(command).await.expect("Receiver inside ClientState should never be destroyed");
+    }
+
+    pub async fn get_command_to_send(&mut self) -> ServerCommand {
+        self.messages_to_send_queue.1.recv().await.expect("Sender inside ClientState should never be destroyed")
     }
 
     pub fn process_command(&mut self, command: ServerCommand) -> ProcessCommandResult {

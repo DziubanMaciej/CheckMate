@@ -1,9 +1,9 @@
 use crate::config::Config;
-use check_mate_common::{CommunicationError, ServerCommand, DEFAULT_WATCH_INTERVAL};
-use std::{
-    io::{Read, Write},
-    time::Duration,
+use check_mate_common::{
+    CommunicationError, ServerCommand, ServerCommandError, DEFAULT_WATCH_INTERVAL,
 };
+use std::time::Duration;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 
 #[derive(PartialEq, Debug)]
 pub enum Action {
@@ -38,53 +38,70 @@ impl Action {
         }
     }
 
-    pub fn execute<T>(&self, tcp_stream: &mut T, config: &Config) -> Result<(), CommunicationError>
-    where
-        T: Read + Write,
-    {
+    pub async fn execute(
+        &self,
+        input_stream: &mut (impl AsyncBufRead + Unpin),
+        output_stream: &mut (impl AsyncWrite + Unpin),
+        config: &Config,
+    ) -> Result<(), CommunicationError> {
         if let Some(ref name) = config.client_name {
             let command = ServerCommand::SetName(name.clone());
-            command.send(tcp_stream, true)?;
+            send_blocking_async(command, output_stream).await?;
         }
 
         match self {
-            Action::ReadMessages(include_names) => Self::read(tcp_stream, *include_names),
-            Action::WatchCommand(data) => {
-                Self::watch(tcp_stream, &data.command, &data.command_args, data.interval)
+            Action::ReadMessages(include_names) => {
+                Self::read(input_stream, output_stream, *include_names).await
             }
-            Action::RefreshClientByName(name) => Self::refresh_client_by_name(tcp_stream, name),
-            Action::Abort => Self::abort(tcp_stream),
+            Action::WatchCommand(data) => {
+                Self::watch(
+                    output_stream,
+                    &data.command,
+                    &data.command_args,
+                    data.interval,
+                )
+                .await
+            }
+            Action::RefreshClientByName(name) => {
+                Self::refresh_client_by_name(output_stream, name).await
+            }
+            Action::Abort => Self::abort(output_stream).await,
         }
     }
 
-    fn read<T>(input_output_stream: &mut T, include_names: bool) -> Result<(), CommunicationError>
-    where
-        T: Read + Write,
-    {
-        ServerCommand::GetStatuses(include_names).send(input_output_stream, true)?;
+    async fn read(
+        input_stream: &mut (impl AsyncBufRead + Unpin),
+        output_stream: &mut (impl AsyncWrite + Unpin),
+        include_names: bool,
+    ) -> Result<(), CommunicationError> {
+        let command = ServerCommand::GetStatuses(include_names);
+        send_blocking_async(command, output_stream).await?;
 
-        match ServerCommand::receive_blocking(input_output_stream)? {
+        match receive_blocking_async(input_stream).await? {
             ServerCommand::Statuses(statuses) => {
                 for status in statuses.iter() {
                     println!("{}", status);
                 }
             }
-            _ => panic!("Unexpected command received"),
+            _ => panic!("Unexpected command received after GetStatuses"),
         }
         Ok(())
     }
 
-    fn watch<T>(
-        output_stream: &mut T,
+    async fn watch(
+        output_stream: &mut (impl AsyncWrite + Unpin),
         command: &str,
         command_args: &Vec<String>,
-        interval : Duration,
-    ) -> Result<(), CommunicationError>
-    where
-        T: Write,
-    {
+        interval: Duration,
+    ) -> Result<(), CommunicationError> {
         loop {
-            let command_output = Self::execute_command(command, command_args);
+            // Run command to get its output
+            let command = command.to_string();
+            let command_args = command_args.clone();
+            let command_output =
+                tokio::task::spawn_blocking(move || Self::execute_command(&command, &command_args))
+                    .await;
+            let command_output = command_output.expect("JoinError is unexpected for watch");
             let command_output = command_output
                 .lines()
                 .filter(|line| !line.trim().is_empty())
@@ -92,38 +109,39 @@ impl Action {
                 .next()
                 .unwrap_or("")
                 .to_string();
+
+            // Send status to the server
             let server_command = if command_output.is_empty() {
                 ServerCommand::SetStatusOk
             } else {
                 ServerCommand::SetStatusError(command_output)
             };
+            send_blocking_async(server_command, output_stream).await?;
 
-            server_command.send(output_stream, false)?;
+            // Wait for selected interval
+            // TODO: technically we should subtract the duration of command.
             if !interval.is_zero() {
-                std::thread::sleep(interval);
+                tokio::time::sleep(interval).await;
             }
         }
     }
 
-    fn refresh_client_by_name<T>(
-        _output_stream: &mut T,
+    async fn refresh_client_by_name(
+        _output_stream: &mut (impl AsyncWrite + Unpin),
         _name: &str,
-    ) -> Result<(), CommunicationError>
-    where
-        T: Write,
-    {
+    ) -> Result<(), CommunicationError> {
         todo!();
     }
 
-    fn abort<T>(output_stream: &mut T) -> Result<(), CommunicationError>
-    where
-        T: Write,
-    {
+    async fn abort(
+        output_stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<(), CommunicationError> {
         let command = ServerCommand::Abort;
-        command.send(output_stream, true)
+        send_blocking_async(command, output_stream).await
     }
 
     fn execute_command(command: &str, command_args: &Vec<String>) -> String {
+        // TODO convert to async
         let subprocess = std::process::Command::new(command)
             .args(command_args)
             .stdout(std::process::Stdio::piped())
@@ -153,5 +171,39 @@ impl Action {
         };
 
         subprocess_out
+    }
+}
+
+pub async fn receive_blocking_async<T: AsyncBufRead + Unpin>(
+    input_stream: &mut T,
+) -> Result<ServerCommand, CommunicationError> {
+    // TODO move to common
+    loop {
+        let buffer = input_stream.fill_buf().await?;
+        if buffer.len() == 0 {
+            return Err(CommunicationError::ClientDisconnected);
+        }
+
+        match ServerCommand::from_bytes(&buffer) {
+            Ok(parse_result) => {
+                input_stream.consume(parse_result.bytes_used);
+                break Ok(parse_result.command);
+            }
+            Err(err) => match err {
+                ServerCommandError::TooFewBytes => continue,
+                _ => break Err(err.into()),
+            },
+        }
+    }
+}
+
+async fn send_blocking_async(
+    command: ServerCommand,
+    stream: &mut (impl AsyncWrite + Unpin),
+) -> Result<(), CommunicationError> {
+    let command_bytes = command.to_bytes();
+    match stream.write(&command_bytes[0..]).await {
+        Ok(_) => Ok(()),
+        Err(_) => Err(CommunicationError::ClientDisconnected),
     }
 }

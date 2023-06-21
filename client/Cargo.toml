@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 check_mate_common = { path = "../common" }
+tokio = { version = "1", features = ["full"] }

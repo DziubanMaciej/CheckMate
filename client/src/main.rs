@@ -1,21 +1,25 @@
 use std::{
-    net::{Ipv4Addr, SocketAddrV4, TcpStream},
+    net::{Ipv4Addr, SocketAddrV4},
     time::Duration,
 };
+use tokio::{io::BufReader, net::TcpStream};
 mod action;
 mod config;
 
 use check_mate_common::CommunicationError;
 use config::Config;
 
-fn connect_to_server(server_address: SocketAddrV4, connection_backoff: Duration) -> TcpStream {
+async fn connect_to_server(
+    server_address: SocketAddrV4,
+    connection_backoff: Duration,
+) -> TcpStream {
     loop {
-        let tcp_stream = match TcpStream::connect(server_address) {
+        let tcp_stream = match TcpStream::connect(server_address).await {
             Ok(ok) => ok,
             Err(err) => {
                 eprintln!("Failed to connect with server: {}. Keep waiting.", err);
                 if !connection_backoff.is_zero() {
-                    std::thread::sleep(connection_backoff);
+                    tokio::time::sleep(connection_backoff).await;
                 }
                 continue;
             }
@@ -24,7 +28,8 @@ fn connect_to_server(server_address: SocketAddrV4, connection_backoff: Duration)
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let config = Config::parse(std::env::args().skip(1));
     let config = match config {
         Ok(x) => x,
@@ -37,9 +42,18 @@ fn main() {
     let server_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);
 
     loop {
-        let mut tcp_stream = connect_to_server(server_address, config.server_connection_backoff);
-        let action_result = config.action.execute(&mut tcp_stream, &config);
+        // Connect to server and prepare IO streams
+        let tcp_stream = connect_to_server(server_address, config.server_connection_backoff).await;
+        let (input_stream, mut output_stream) = tcp_stream.into_split();
+        let mut input_stream = BufReader::new(input_stream);
 
+        // Execute action
+        let action_result = config
+            .action
+            .execute(&mut input_stream, &mut output_stream, &config)
+            .await;
+
+        // Handle errors
         if let Err(err) = action_result {
             match err {
                 CommunicationError::ClientDisconnected => (),

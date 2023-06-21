@@ -20,14 +20,21 @@ async fn execute_command_from_client(
 
     command: ServerCommand,
 ) {
-    let process_command_result = client_state.process_command(command);
-    if let client_state::ProcessCommandResult::GetStatuses(include_names) = process_command_result {
-        let errors = task_communication
-            .read_messages(task_id, receiver, sender, include_names)
-            .await;
-        client_state
-            .push_command_to_send(ServerCommand::Statuses(errors))
-            .await;
+    match client_state.process_command(command) {
+        client_state::ProcessCommandResult::Ok => (),
+        client_state::ProcessCommandResult::GetStatuses(include_names) => {
+            let errors = task_communication
+                .read_messages(task_id, receiver, sender, include_names)
+                .await;
+            client_state
+                .push_command_to_send(ServerCommand::Statuses(errors))
+                .await;
+        }
+        client_state::ProcessCommandResult::RefreshClientByName(name) => {
+            task_communication
+                .refresh_client_by_name(task_id, name)
+                .await;
+        }
     }
 }
 
@@ -61,7 +68,7 @@ async fn handle_client_async(
             }
             task_message = receiver.recv() => {
                 match task_message {
-                    Some(x) => task_communication.process_task_message(x, &client_state).await,
+                    Some(x) => task_communication.process_task_message(x, &mut client_state).await,
                     None => todo!(), // TODO what does it mean?
                 }
             }

@@ -20,6 +20,7 @@
 use crate::client_state::ClientState;
 use std::ops::DerefMut;
 use std::{collections::HashMap, sync::Arc};
+use check_mate_common::ServerCommand;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
     Mutex,
@@ -39,7 +40,7 @@ struct PerThreadData {
 pub enum TaskMessage {
     ReadMessageRequest(Sender<TaskMessage>),
     ReadMessageResponse(Result<(), String>, String),
-    // Refresh,
+    RefreshByName(String),
     // Abort,
 }
 
@@ -68,7 +69,7 @@ impl TaskCommunication {
         data.remove(&task_id);
     }
 
-    pub async fn process_task_message(&self, message: TaskMessage, client_state: &ClientState) {
+    pub async fn process_task_message(&self, message: TaskMessage, client_state: &mut ClientState) {
         match message {
             TaskMessage::ReadMessageResponse(_, _) => panic!("Unexpected task message"),
             TaskMessage::ReadMessageRequest(sender) => {
@@ -76,9 +77,21 @@ impl TaskCommunication {
                     TaskMessage::ReadMessageResponse(client_state.get_status().clone(), client_state.get_name_for_logging());
                     Self::unicast(sender, message).await;
                 }
-                // TaskMessage::Refresh => todo!(),
+                TaskMessage::RefreshByName(ref name) => {
+                    if let Some(current_name) = client_state.get_name() {
+                        if current_name == name {
+                            client_state.push_command_to_send(ServerCommand::Refresh).await;
+                        }
+                    }
+                }
                 // TaskMessage::Abort => todo!(),
             }
+    }
+
+    pub async fn refresh_client_by_name(&self, task_id: usize, name: String) {
+        let data = self.get_locked_data_snapshot().await;
+        let message = TaskMessage::RefreshByName(name);
+        Self::broadcast(task_id, &data, message).await;
     }
 
     pub async fn read_messages(
@@ -88,15 +101,7 @@ impl TaskCommunication {
         sender: &Sender<TaskMessage>,
         include_names: bool,
     ) -> Vec<String> {
-        let mut data: PerThreadDataMap;
-        {
-            // Clone the metadata about threads, so we can release the lock
-            // We'll be working on stale data, but it's better than holding
-            // the mutex for so long.
-            let mut lock = self.locked_data.lock().await;
-            let original_data = lock.deref_mut();
-            data = original_data.clone();
-        }
+        let mut data = self.get_locked_data_snapshot().await;
 
         // Broadcast message to all other task and collect their responses
         // in a vector. The vector could be smaller than our task list, since
@@ -129,7 +134,7 @@ impl TaskCommunication {
         result
     }
 
-    async fn broadcast(task_id: usize, data: &mut PerThreadDataMap, message: TaskMessage) {
+    async fn broadcast(task_id: usize, data: &PerThreadDataMap, message: TaskMessage) {
         for (_id, data) in data.iter().filter(|(id, _)| **id != task_id) {
             let per_thread_data = data.lock().await;
             let _send_result = per_thread_data.sender.send(message.clone()).await;
@@ -160,5 +165,14 @@ impl TaskCommunication {
         if let Err(_err) = sender.send(message).await {
             panic!("Could not send");
         }
+    }
+
+    async fn get_locked_data_snapshot(&self) -> PerThreadDataMap {
+        // Clone the metadata about threads, so we can release the lock
+        // We'll be working on stale data, but it's better than holding
+        // the mutex for a very long time.
+        let mut lock = self.locked_data.lock().await;
+        let original_data = lock.deref_mut();
+        original_data.clone()
     }
 }

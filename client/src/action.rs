@@ -53,6 +53,7 @@ impl Action {
             }
             Action::WatchCommand(data) => {
                 Self::watch(
+                    input_stream,
                     output_stream,
                     &data.command,
                     &data.command_args,
@@ -87,18 +88,24 @@ impl Action {
     }
 
     async fn watch(
+        input_stream: &mut (impl AsyncBufRead + Unpin),
         output_stream: &mut (impl AsyncWrite + Unpin),
         command: &str,
         command_args: &Vec<String>,
         interval: Duration,
     ) -> Result<(), CommunicationError> {
-        loop {
+        async fn do_watch(
+            output_stream: &mut (impl AsyncWrite + Unpin),
+            command: &str,
+            command_args: &Vec<String>,
+        ) -> Result<(), CommunicationError> {
             // Run command to get its output
             let command = command.to_string();
             let command_args = command_args.clone();
-            let command_output =
-                tokio::task::spawn_blocking(move || Self::execute_command(&command, &command_args))
-                    .await;
+            let command_output = tokio::task::spawn_blocking(move || {
+                Action::execute_command(&command, &command_args)
+            })
+            .await;
             let command_output = command_output.expect("JoinError is unexpected for watch");
             let command_output = command_output
                 .lines()
@@ -116,19 +123,35 @@ impl Action {
             };
             server_command.send_async(output_stream).await?;
 
-            // Wait for selected interval
-            // TODO: technically we should subtract the duration of command.
-            if !interval.is_zero() {
-                tokio::time::sleep(interval).await;
+            Ok(())
+        }
+
+        // Run first iteration immediately
+        do_watch(output_stream, command, command_args).await?;
+
+        loop {
+            // Wait for either watch interval or refresh signal from server
+            tokio::select! {
+                _ = tokio::time::sleep(interval) => (),
+                server_command = ServerCommand::receive_async(input_stream) => {
+                    match server_command? {
+                        ServerCommand::Refresh => (),
+                        _ => panic!("Unexpected command received during watch"),
+                    }
+                }
             }
+
+            // Execute command
+            do_watch(output_stream, command, command_args).await?;
         }
     }
 
     async fn refresh_client_by_name(
-        _output_stream: &mut (impl AsyncWrite + Unpin),
-        _name: &str,
+        output_stream: &mut (impl AsyncWrite + Unpin),
+        name: &str,
     ) -> Result<(), CommunicationError> {
-        todo!();
+        let command = ServerCommand::RefreshClientByName(name.into());
+        command.send_async(output_stream).await
     }
 
     async fn abort(

@@ -10,6 +10,7 @@ pub struct ClientState {
 pub enum ProcessCommandResult {
     Ok,
     GetStatuses(bool),
+    RefreshClientByName(String),
 }
 
 impl ClientState {
@@ -23,6 +24,10 @@ impl ClientState {
 
     pub fn get_status(&self) -> &Result<(), String> {
         &self.status
+    }
+
+    pub fn get_name(&self) -> &Option<String> {
+        &self.name
     }
 
     pub fn get_name_for_logging(&self) -> String {
@@ -67,12 +72,15 @@ impl ClientState {
             ServerCommand::GetStatuses(include_names) => {
                 return ProcessCommandResult::GetStatuses(include_names)
             }
-            ServerCommand::RefreshClientByName(_) => panic!("Not implemented command"),
+            ServerCommand::RefreshClientByName(name) => {
+                return ProcessCommandResult::RefreshClientByName(name)
+            }
             ServerCommand::SetName(name) => {
                 println!("Name set to {}", name);
                 self.name = Some(name);
             }
             ServerCommand::Statuses(_) => panic!("Unexpected server command"),
+            ServerCommand::Refresh => panic!("Unexpected server command"),
         };
 
         ProcessCommandResult::Ok

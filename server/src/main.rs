@@ -1,5 +1,4 @@
 mod client_state;
-mod communication;
 mod config;
 mod task_communication;
 
@@ -8,14 +7,9 @@ use client_state::ClientState;
 use config::Config;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use task_communication::{TaskCommunication, TaskMessage};
-use tokio::io::{AsyncWrite, BufReader};
+use tokio::io::BufReader;
 use tokio::net::TcpListener;
-use tokio::{
-    io::AsyncWriteExt,
-    sync::mpsc::{channel, Receiver, Sender},
-};
-
-use crate::communication::receive_blocking_async;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 async fn execute_command_from_client(
     task_id: usize,
@@ -34,21 +28,6 @@ async fn execute_command_from_client(
         client_state
             .push_command_to_send(ServerCommand::Statuses(errors))
             .await;
-    }
-}
-
-async fn send_command_to_client(
-    command: ServerCommand,
-    client_state: &mut ClientState,
-    stream: &mut (impl AsyncWrite + Unpin),
-) {
-    let command_bytes = command.to_bytes();
-    let send_result = stream.write(&command_bytes[0..]).await;
-    if let Err(_) = send_result {
-        eprintln!(
-            "Client {} got disconnected",
-            client_state.get_name_for_logging()
-        );
     }
 }
 
@@ -74,7 +53,7 @@ async fn handle_client_async(
     // Main loop
     let _err = loop {
         tokio::select! {
-            command = receive_blocking_async(&mut input_stream) => {
+            command = ServerCommand::receive_async(&mut input_stream) => {
                 match command {
                     Ok(x) => execute_command_from_client(task_id, &mut client_state, &mut receiver, &sender, &mut task_communication, x).await,
                     Err(x) => break x,
@@ -87,7 +66,10 @@ async fn handle_client_async(
                 }
             }
             command = client_state.get_command_to_send() => {
-                send_command_to_client(command, &mut client_state, &mut output_stream).await;
+                match command.send_async(&mut output_stream).await{
+                    Ok(_) => (),
+                    Err(x) => break x,
+                }
             }
         }
     };

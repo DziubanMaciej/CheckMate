@@ -37,6 +37,9 @@ dependencies = [
 [[package]]
 name = "check_mate_common"
 version = "0.1.0"
+dependencies = [
+ "tokio",
+]
 
 [[package]]
 name = "check_mate_server"

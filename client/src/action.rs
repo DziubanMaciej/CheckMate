@@ -1,9 +1,7 @@
 use crate::config::Config;
-use check_mate_common::{
-    CommunicationError, ServerCommand, ServerCommandError, DEFAULT_WATCH_INTERVAL,
-};
+use check_mate_common::{CommunicationError, ServerCommand, DEFAULT_WATCH_INTERVAL};
 use std::time::Duration;
-use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncWrite};
 
 #[derive(PartialEq, Debug)]
 pub enum Action {
@@ -46,7 +44,7 @@ impl Action {
     ) -> Result<(), CommunicationError> {
         if let Some(ref name) = config.client_name {
             let command = ServerCommand::SetName(name.clone());
-            send_blocking_async(command, output_stream).await?;
+            command.send_async(output_stream).await?;
         }
 
         match self {
@@ -75,9 +73,9 @@ impl Action {
         include_names: bool,
     ) -> Result<(), CommunicationError> {
         let command = ServerCommand::GetStatuses(include_names);
-        send_blocking_async(command, output_stream).await?;
+        command.send_async(output_stream).await?;
 
-        match receive_blocking_async(input_stream).await? {
+        match ServerCommand::receive_async(input_stream).await? {
             ServerCommand::Statuses(statuses) => {
                 for status in statuses.iter() {
                     println!("{}", status);
@@ -116,7 +114,7 @@ impl Action {
             } else {
                 ServerCommand::SetStatusError(command_output)
             };
-            send_blocking_async(server_command, output_stream).await?;
+            server_command.send_async(output_stream).await?;
 
             // Wait for selected interval
             // TODO: technically we should subtract the duration of command.
@@ -137,7 +135,7 @@ impl Action {
         output_stream: &mut (impl AsyncWrite + Unpin),
     ) -> Result<(), CommunicationError> {
         let command = ServerCommand::Abort;
-        send_blocking_async(command, output_stream).await
+        command.send_async(output_stream).await
     }
 
     fn execute_command(command: &str, command_args: &Vec<String>) -> String {
@@ -171,39 +169,5 @@ impl Action {
         };
 
         subprocess_out
-    }
-}
-
-pub async fn receive_blocking_async<T: AsyncBufRead + Unpin>(
-    input_stream: &mut T,
-) -> Result<ServerCommand, CommunicationError> {
-    // TODO move to common
-    loop {
-        let buffer = input_stream.fill_buf().await?;
-        if buffer.len() == 0 {
-            return Err(CommunicationError::ClientDisconnected);
-        }
-
-        match ServerCommand::from_bytes(&buffer) {
-            Ok(parse_result) => {
-                input_stream.consume(parse_result.bytes_used);
-                break Ok(parse_result.command);
-            }
-            Err(err) => match err {
-                ServerCommandError::TooFewBytes => continue,
-                _ => break Err(err.into()),
-            },
-        }
-    }
-}
-
-async fn send_blocking_async(
-    command: ServerCommand,
-    stream: &mut (impl AsyncWrite + Unpin),
-) -> Result<(), CommunicationError> {
-    let command_bytes = command.to_bytes();
-    match stream.write(&command_bytes[0..]).await {
-        Ok(_) => Ok(()),
-        Err(_) => Err(CommunicationError::ClientDisconnected),
     }
 }

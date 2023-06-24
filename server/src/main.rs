@@ -41,6 +41,7 @@ async fn execute_command_from_client(
 async fn handle_client_async(
     task_id: usize,
     mut task_communication: TaskCommunication,
+    config : Config,
     stream: tokio::net::TcpStream,
 ) {
     // Prepare communication with client
@@ -52,7 +53,7 @@ async fn handle_client_async(
         .register_task(task_id, sender.clone())
         .await;
 
-    let mut client_state = ClientState::new();
+    let mut client_state = ClientState::new(config.log_every_status);
 
     let mut buffer: Vec<u8> = Vec::new();
     buffer.resize(100, 0);
@@ -119,8 +120,9 @@ async fn main() {
         };
 
         let task_communication = task_communication.clone();
+        let config = config.clone();
         tokio::spawn(async move {
-            handle_client_async(task_id, task_communication, tcp_stream).await;
+            handle_client_async(task_id, task_communication, config, tcp_stream).await;
         });
 
         task_id += 1;

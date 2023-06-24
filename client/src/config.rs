@@ -541,16 +541,3 @@ mod tests {
         }
     }
 }
-
-/*
-pub enum CommandLineError {
-    NoActionSpecified,
-    NoWatchCommandSpecified,
-    NoClientNameSpecified,
-    NoValueSpecified(String, String),
-
-    InvalidValue(String, String),
-    InvalidArgument(String),
-}
-
- */

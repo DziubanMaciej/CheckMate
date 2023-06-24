@@ -2,6 +2,7 @@ use check_mate_common::ServerCommand;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 pub struct ClientState {
+    log_every_status: bool,
     name: Option<String>,
     status: Result<(), String>,
     messages_to_send_queue: (Sender<ServerCommand>, Receiver<ServerCommand>),
@@ -14,8 +15,9 @@ pub enum ProcessCommandResult {
 }
 
 impl ClientState {
-    pub fn new() -> Self {
+    pub fn new(log_every_status: bool) -> Self {
         ClientState {
+            log_every_status: log_every_status,
             name: None,
             status: Ok(()),
             messages_to_send_queue: channel(2),
@@ -36,11 +38,19 @@ impl ClientState {
     }
 
     pub async fn push_command_to_send(&mut self, command: ServerCommand) {
-        self.messages_to_send_queue.0.send(command).await.expect("Receiver inside ClientState should never be destroyed");
+        self.messages_to_send_queue
+            .0
+            .send(command)
+            .await
+            .expect("Receiver inside ClientState should never be destroyed");
     }
 
     pub async fn get_command_to_send(&mut self) -> ServerCommand {
-        self.messages_to_send_queue.1.recv().await.expect("Sender inside ClientState should never be destroyed")
+        self.messages_to_send_queue
+            .1
+            .recv()
+            .await
+            .expect("Sender inside ClientState should never be destroyed")
     }
 
     pub fn process_command(&mut self, command: ServerCommand) -> ProcessCommandResult {
@@ -50,7 +60,7 @@ impl ClientState {
                 std::process::exit(0);
             }
             ServerCommand::SetStatusOk => {
-                if let Err(_) = self.status {
+                if self.log_every_status || self.status.is_err() {
                     println!("Client {} is ok", self.get_name_for_logging());
                 }
                 self.status = Ok(());
@@ -61,7 +71,7 @@ impl ClientState {
                     Err(ref old_err) => *old_err != new_err,
                 };
                 self.status = Err(new_err);
-                if is_new_error {
+                if self.log_every_status || is_new_error {
                     println!(
                         "Client {} has error: {}",
                         self.get_name_for_logging(),

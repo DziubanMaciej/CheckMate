@@ -35,13 +35,18 @@ async fn execute_command_from_client(
                 .refresh_client_by_name(task_id, name)
                 .await;
         }
+        client_state::ProcessCommandResult::RefreshAllClients => {
+            task_communication
+                .refresh_all_clients(task_id)
+                .await;
+        }
     }
 }
 
 async fn handle_client_async(
     task_id: usize,
     mut task_communication: TaskCommunication,
-    config : Config,
+    config: Config,
     stream: tokio::net::TcpStream,
 ) {
     // Prepare communication with client

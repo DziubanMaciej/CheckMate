@@ -8,6 +8,7 @@ pub enum Action {
     ReadMessages(bool),
     WatchCommand(WatchCommandData),
     RefreshClientByName(String),
+    RefreshAllClients,
     Abort,
 }
 
@@ -64,6 +65,7 @@ impl Action {
             Action::RefreshClientByName(name) => {
                 Self::refresh_client_by_name(output_stream, name).await
             }
+            Action::RefreshAllClients => Self::refresh_all_clients(output_stream).await,
             Action::Abort => Self::abort(output_stream).await,
         }
     }
@@ -151,6 +153,13 @@ impl Action {
         name: &str,
     ) -> Result<(), CommunicationError> {
         let command = ServerCommand::RefreshClientByName(name.into());
+        command.send_async(output_stream).await
+    }
+
+    async fn refresh_all_clients(
+        output_stream: &mut (impl AsyncWrite + Unpin),
+    ) -> Result<(), CommunicationError> {
+        let command = ServerCommand::RefreshAllClients;
         command.send_async(output_stream).await
     }
 

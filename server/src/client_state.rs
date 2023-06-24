@@ -12,6 +12,7 @@ pub enum ProcessCommandResult {
     Ok,
     GetStatuses(bool),
     RefreshClientByName(String),
+    RefreshAllClients,
 }
 
 impl ClientState {
@@ -85,6 +86,7 @@ impl ClientState {
             ServerCommand::RefreshClientByName(name) => {
                 return ProcessCommandResult::RefreshClientByName(name)
             }
+            ServerCommand::RefreshAllClients => return ProcessCommandResult::RefreshAllClients,
             ServerCommand::SetName(name) => {
                 println!("Name set to {}", name);
                 self.name = Some(name);

@@ -18,9 +18,9 @@
 //   - remove from list
 
 use crate::client_state::ClientState;
+use check_mate_common::ServerCommand;
 use std::ops::DerefMut;
 use std::{collections::HashMap, sync::Arc};
-use check_mate_common::ServerCommand;
 use tokio::sync::{
     mpsc::{Receiver, Sender},
     Mutex,
@@ -41,6 +41,7 @@ pub enum TaskMessage {
     ReadMessageRequest(Sender<TaskMessage>),
     ReadMessageResponse(Result<(), String>, String),
     RefreshByName(String),
+    RefreshAll,
     // Abort,
 }
 
@@ -73,24 +74,38 @@ impl TaskCommunication {
         match message {
             TaskMessage::ReadMessageResponse(_, _) => panic!("Unexpected task message"),
             TaskMessage::ReadMessageRequest(sender) => {
-                    let message =
-                    TaskMessage::ReadMessageResponse(client_state.get_status().clone(), client_state.get_name_for_logging());
-                    Self::unicast(sender, message).await;
-                }
-                TaskMessage::RefreshByName(ref name) => {
-                    if let Some(current_name) = client_state.get_name() {
-                        if current_name == name {
-                            client_state.push_command_to_send(ServerCommand::Refresh).await;
-                        }
+                let message = TaskMessage::ReadMessageResponse(
+                    client_state.get_status().clone(),
+                    client_state.get_name_for_logging(),
+                );
+                Self::unicast(sender, message).await;
+            }
+            TaskMessage::RefreshByName(ref name) => {
+                if let Some(current_name) = client_state.get_name() {
+                    if current_name == name {
+                        client_state
+                            .push_command_to_send(ServerCommand::Refresh)
+                            .await;
                     }
                 }
-                // TaskMessage::Abort => todo!(),
             }
+            TaskMessage::RefreshAll => {
+                client_state
+                    .push_command_to_send(ServerCommand::Refresh)
+                    .await;
+            } // TaskMessage::Abort => todo!(),
+        }
     }
 
     pub async fn refresh_client_by_name(&self, task_id: usize, name: String) {
         let data = self.get_locked_data_snapshot().await;
         let message = TaskMessage::RefreshByName(name);
+        Self::broadcast(task_id, &data, message).await;
+    }
+
+    pub async fn refresh_all_clients(&self, task_id: usize) {
+        let data = self.get_locked_data_snapshot().await;
+        let message = TaskMessage::RefreshAll;
         Self::broadcast(task_id, &data, message).await;
     }
 

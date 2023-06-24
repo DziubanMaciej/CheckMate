@@ -51,6 +51,7 @@ impl Config {
                 )?;
                 Action::RefreshClientByName(name)
             }
+            "refresh_all" => Action::RefreshAllClients,
             "abort" => Action::Abort,
             _ => return Err(CommandLineError::InvalidValue("action".into(), action)),
         };
@@ -277,6 +278,17 @@ mod tests {
 
         let mut expected = Config::default();
         expected.action = Action::RefreshClientByName("client12".to_string());
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn refresh_all_action_is_parsed() {
+        let args = ["refresh_all"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let mut expected = Config::default();
+        expected.action = Action::RefreshAllClients;
         assert_eq!(config, expected);
     }
 

@@ -8,10 +8,11 @@ pub enum ServerCommand {
     SetStatusError(String),
     GetStatuses(bool),
     RefreshClientByName(String),
+    RefreshAllClients,
     SetName(String),
 
     Statuses(Vec<String>),
-    Refresh,
+    Refresh, // TODO remove
 }
 
 #[derive(Debug, PartialEq)]
@@ -40,9 +41,10 @@ impl ServerCommand {
     pub(crate) const ID_SET_STATUS_ERROR: u8 = 3;
     pub(crate) const ID_GET_STATUSES: u8 = 4;
     pub(crate) const ID_REFRESH_CLIENT_BY_NAME: u8 = 5;
-    pub(crate) const ID_SET_NAME: u8 = 6;
-    pub(crate) const ID_STATUSES: u8 = 7;
-    pub(crate) const ID_REFRESH: u8 = 8;
+    pub(crate) const ID_REFRESH_ALL_CLIENTS: u8 = 6;
+    pub(crate) const ID_SET_NAME: u8 = 7;
+    pub(crate) const ID_STATUSES: u8 = 8;
+    pub(crate) const ID_REFRESH: u8 = 9;
 
     pub fn from_bytes(bytes: &[u8]) -> Result<ServerCommandParse, ServerCommandError> {
         let mut bytes_used = 0;
@@ -97,6 +99,7 @@ impl ServerCommand {
             ServerCommand::ID_REFRESH_CLIENT_BY_NAME => {
                 ServerCommand::RefreshClientByName(take_string(&mut bytes_used)?)
             }
+            ServerCommand::ID_REFRESH_ALL_CLIENTS => Self::RefreshAllClients,
             ServerCommand::ID_SET_NAME => ServerCommand::SetName(take_string(&mut bytes_used)?),
             ServerCommand::ID_STATUSES => ServerCommand::Statuses(take_strings(&mut bytes_used)?),
             ServerCommand::ID_REFRESH => ServerCommand::Refresh,
@@ -144,6 +147,7 @@ impl ServerCommand {
                 append_string(&mut result, &name);
                 result
             }
+            ServerCommand::RefreshAllClients => vec![ServerCommand::ID_REFRESH_ALL_CLIENTS],
             ServerCommand::SetName(name) => {
                 let mut result = vec![ServerCommand::ID_SET_NAME];
                 append_string(&mut result, &name);
@@ -209,6 +213,15 @@ mod tests {
     #[test]
     fn command_refresh_is_serialized() {
         let command = ServerCommand::Refresh;
+        let bytes = command.to_bytes();
+        let parse_result = ServerCommand::from_bytes(&bytes).expect("Command should deserialize");
+        assert_eq!(parse_result.command, command);
+        assert_eq!(parse_result.bytes_used, 1);
+    }
+
+    #[test]
+    fn command_refresh_all_is_serialized() {
+        let command = ServerCommand::RefreshAllClients;
         let bytes = command.to_bytes();
         let parse_result = ServerCommand::from_bytes(&bytes).expect("Command should deserialize");
         assert_eq!(parse_result.command, command);

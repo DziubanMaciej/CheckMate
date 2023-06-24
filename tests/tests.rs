@@ -170,3 +170,49 @@ fn refreshing_by_name_works() {
         .contains("Client Watcher2 has error: Error", 2)
         .nothing_else();
 }
+
+#[test]
+fn refreshing_all_works() {
+    let port = get_port_number();
+
+    // Start server with log_every_status flag, so we'll be able to see updates of watchers after refreshing them.
+    let mut server = Subprocess::start_server("server", port, &["-e", "1"]);
+
+    // Two watchers are working with very high watch interval, meaning they should only
+    // send status to server once.
+    let mut _client_watcher1 = Subprocess::start_client(
+        "client_watcher1",
+        port,
+        &[
+            "watch", "echo", "Error", "--", "-n", "Watcher1", "-w", "5000",
+        ],
+    );
+    let mut _client_watcher2 = Subprocess::start_client(
+        "client_watcher2",
+        port,
+        &[
+            "watch", "echo", "Error", "--", "-n", "Watcher2", "-w", "5000",
+        ],
+    );
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    // Refresh both watchers
+    let mut client_refresher =
+        Subprocess::start_client("client_refresher", port, &["refresh_all"]);
+    client_refresher.wait_and_get_output(true);
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    // Server should see only one report from Watcher1, but two reports from Watcher2, since
+    // it has been explicitly refreshed.
+    _client_watcher1.kill_and_get_output();
+    _client_watcher2.kill_and_get_output();
+    let server_out = server.kill_and_get_output();
+    server_out
+        .lines()
+        .to_collection_counter()
+        .contains("Name set to Watcher1", 1)
+        .contains("Name set to Watcher2", 1)
+        .contains("Client Watcher1 has error: Error", 2)
+        .contains("Client Watcher2 has error: Error", 2)
+        .nothing_else();
+}

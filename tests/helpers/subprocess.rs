@@ -6,12 +6,13 @@ pub struct Subprocess {
 }
 
 impl Subprocess {
-    pub fn start_server(name: &str, port: u16) -> Subprocess {
+    pub fn start_server(name: &str, port: u16, args: &[&str]) -> Subprocess {
         let server_bin = get_cargo_bin("check_mate_server").expect("Server binary should be found");
 
         let child = std::process::Command::new(server_bin)
             .arg("-p")
             .arg(port.to_string())
+            .args(args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
             .spawn()
@@ -58,6 +59,11 @@ impl Subprocess {
             assert!(out.status.success(), "{} should return success", self.name);
         }
         String::from_utf8(out.stdout).expect("Server stdout should be available")
+    }
+
+    pub fn kill_and_get_output(&mut self) -> String {
+        self.kill();
+        self.wait_and_get_output(false)
     }
 
     pub fn kill(&mut self) {

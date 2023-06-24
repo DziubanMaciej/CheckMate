@@ -1,4 +1,5 @@
 mod helpers;
+use helpers::collection_counter::CountableCollection;
 use helpers::port::get_port_number;
 use helpers::seekable::Seekable;
 use helpers::subprocess::Subprocess;
@@ -6,7 +7,7 @@ use helpers::subprocess::Subprocess;
 #[test]
 fn server_closes_after_abort_command() {
     let port = get_port_number();
-    let mut server = Subprocess::start_server("server", port);
+    let mut server = Subprocess::start_server("server", port, &[]);
     let mut client = Subprocess::start_client("client", port, &["abort"]);
 
     assert!(client.wait_and_get_output(true).is_empty());
@@ -17,7 +18,7 @@ fn server_closes_after_abort_command() {
 #[test]
 fn server_logs_client_name() {
     let port = get_port_number();
-    let mut server = Subprocess::start_server("server", port);
+    let mut server = Subprocess::start_server("server", port, &[]);
     let mut client = Subprocess::start_client("client", port, &["abort", "-n", "Aborter"]);
 
     assert!(client.wait_and_get_output(true).is_empty());
@@ -32,7 +33,7 @@ fn server_logs_client_name() {
 #[test]
 fn read_messages_with_single_client_works() {
     let port = get_port_number();
-    let _server = Subprocess::start_server("server", port);
+    let _server = Subprocess::start_server("server", port, &[]);
     let _client_watcher = Subprocess::start_client(
         "client_watcher",
         port,
@@ -60,7 +61,7 @@ fn client_reconnects_when_server_restarts() {
     );
 
     for i in 0..2 {
-        let mut server = Subprocess::start_server(&format!("server{i}"), port);
+        let mut server = Subprocess::start_server(&format!("server{i}"), port, &[]);
         std::thread::sleep(std::time::Duration::from_millis(50));
         server.kill();
         let server_out = server.wait_and_get_output(false);
@@ -73,7 +74,7 @@ fn client_reconnects_when_server_restarts() {
 #[test]
 fn read_messages_with_names_works() {
     let port = get_port_number();
-    let _server = Subprocess::start_server("server", port);
+    let _server = Subprocess::start_server("server", port, &[]);
     let _client_watcher1 =
         Subprocess::start_client("client_watcher1", port, &["watch", "echo", "error1"]);
     let _client_watcher2 = Subprocess::start_client(
@@ -94,7 +95,7 @@ fn read_messages_with_names_works() {
 #[test]
 fn read_messages_with_multiple_clients_works() {
     let port = get_port_number();
-    let _server = Subprocess::start_server("server", port);
+    let _server = Subprocess::start_server("server", port, &[]);
     let _client_watcher1 = Subprocess::start_client(
         "client_watcher1",
         port,
@@ -121,4 +122,49 @@ fn read_messages_with_multiple_clients_works() {
     let lines: Vec<&str> = client_reader_out.lines().collect();
     assert!(lines.contains(&"some nice error")); // TODO this does not check that no other lines are printed.
     assert!(lines.contains(&"some other error"));
+}
+
+#[test]
+fn refreshing_by_name_works() {
+    let port = get_port_number();
+
+    // Start server with log_every_status flag, so we'll be able to see updates of Watcher2 after refreshing it.
+    let mut server = Subprocess::start_server("server", port, &["-e", "1"]);
+
+    // Two watchers are working with very high watch interval, meaning they should only
+    // send status to server once.
+    let mut _client_watcher1 = Subprocess::start_client(
+        "client_watcher1",
+        port,
+        &[
+            "watch", "echo", "Error", "--", "-n", "Watcher1", "-w", "5000",
+        ],
+    );
+    let mut _client_watcher2 = Subprocess::start_client(
+        "client_watcher2",
+        port,
+        &[
+            "watch", "echo", "Error", "--", "-n", "Watcher2", "-w", "5000",
+        ],
+    );
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    // Refresh one of the watchers to cause the second status report to server
+    let mut client_refresher =
+        Subprocess::start_client("client_watcher1", port, &["refresh", "Watcher2"]);
+    client_refresher.wait_and_get_output(true);
+
+    // Server should see only one report from Watcher1, but two reports from Watcher2, since
+    // it has been explicitly refreshed.
+    _client_watcher1.kill_and_get_output();
+    _client_watcher2.kill_and_get_output();
+    let server_out = server.kill_and_get_output();
+    server_out
+        .lines()
+        .to_collection_counter()
+        .contains("Name set to Watcher1", 1)
+        .contains("Name set to Watcher2", 1)
+        .contains("Client Watcher1 has error: Error", 1)
+        .contains("Client Watcher2 has error: Error", 2)
+        .nothing_else();
 }

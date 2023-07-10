@@ -7,7 +7,7 @@ use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};
 pub enum CommunicationError {
     IoError(std::io::Error),
     CommandParseError(ServerCommandError),
-    ClientDisconnected, // TODO rename to SocketDisconnected
+    SocketDisconnected,
 }
 
 impl From<std::io::Error> for CommunicationError {
@@ -26,7 +26,7 @@ impl Display for CommunicationError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CommunicationError::IoError(err) => write!(f, "IoError {}", err),
-            CommunicationError::ClientDisconnected => write!(f, "Client disconnected"),
+            CommunicationError::SocketDisconnected => write!(f, "Socket disconnected"),
             CommunicationError::CommandParseError(err) => write!(f, "CommandParseError {}", err),
         }
     }
@@ -39,7 +39,7 @@ impl ServerCommand {
         loop {
             let buffer = input_stream.fill_buf().await?;
             if buffer.is_empty() {
-                return Err(CommunicationError::ClientDisconnected);
+                return Err(CommunicationError::SocketDisconnected);
             }
 
             match ServerCommand::from_bytes(buffer) {
@@ -62,7 +62,7 @@ impl ServerCommand {
         let command_bytes = self.to_bytes();
         match stream.write(&command_bytes[0..]).await {
             Ok(_) => Ok(()),
-            Err(_) => Err(CommunicationError::ClientDisconnected),
+            Err(_) => Err(CommunicationError::SocketDisconnected),
         }
     }
 }

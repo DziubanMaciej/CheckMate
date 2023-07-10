@@ -62,7 +62,7 @@ async fn main() {
         // Handle errors
         if let Err(err) = action_result {
             match err {
-                CommunicationError::ClientDisconnected => (),
+                CommunicationError::SocketDisconnected => (),
                 _ => {
                     eprintln!("ERROR: {}", err);
                     std::process::exit(1);

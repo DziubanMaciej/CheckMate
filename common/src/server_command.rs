@@ -69,7 +69,7 @@ impl ServerCommand {
         };
         let take_dword = |index: &mut usize| -> Result<u32, ServerCommandError> {
             let b = take_bytes(index, 4)?;
-            let b: [u8; 4] = [b[0], b[1], b[2], b[3]]; // TODO why do I need this...
+            let b = b.try_into().expect("Slice must have a length of 4");
             let b = u32::from_ne_bytes(b);
             Ok(b)
         };

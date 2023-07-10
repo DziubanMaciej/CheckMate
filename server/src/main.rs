@@ -2,7 +2,7 @@ mod client_state;
 mod config;
 mod task_communication;
 
-use check_mate_common::ServerCommand;
+use check_mate_common::{CommunicationError, ServerCommand};
 use client_state::ClientState;
 use config::Config;
 use std::net::{Ipv4Addr, SocketAddrV4};
@@ -36,9 +36,7 @@ async fn execute_command_from_client(
                 .await;
         }
         client_state::ProcessCommandResult::RefreshAllClients => {
-            task_communication
-                .refresh_all_clients(task_id)
-                .await;
+            task_communication.refresh_all_clients(task_id).await;
         }
     }
 }
@@ -64,7 +62,7 @@ async fn handle_client_async(
     buffer.resize(100, 0);
 
     // Main loop
-    let _err = loop {
+    let main_loop_error = loop {
         tokio::select! {
             command = ServerCommand::receive_async(&mut input_stream) => {
                 match command {
@@ -75,7 +73,7 @@ async fn handle_client_async(
             task_message = receiver.recv() => {
                 match task_message {
                     Some(x) => task_communication.process_task_message(x, &mut client_state).await,
-                    None => todo!(), // TODO what does it mean?
+                    None => break CommunicationError::SocketDisconnected,
                 }
             }
             command = client_state.get_command_to_send() => {
@@ -87,7 +85,18 @@ async fn handle_client_async(
         }
     };
 
-    // TODO: handle error
+    // Handle erorr from the main loop
+    match main_loop_error {
+        CommunicationError::IoError(_) => eprintln!(
+            "ERROR: IO error during communication with client {}",
+            client_state.get_name_or_default()
+        ),
+        CommunicationError::CommandParseError(_) => eprintln!(
+            "ERROR: client {} sent an incorrect command",
+            client_state.get_name_or_default()
+        ),
+        CommunicationError::SocketDisconnected => (),
+    }
 
     task_communication.unregister_task(task_id).await;
 }

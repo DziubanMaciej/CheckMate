@@ -53,6 +53,8 @@ fn read_messages_with_single_client_works() {
 
 #[test]
 fn client_reconnects_when_server_restarts() {
+    // TODO this test may fail sporadically due to the sleep being to short. I should make it smarter...
+
     let port = get_port_number();
     let _client_watcher = Subprocess::start_client(
         "client_watcher",
@@ -63,8 +65,7 @@ fn client_reconnects_when_server_restarts() {
     for i in 0..2 {
         let mut server = Subprocess::start_server(&format!("server{i}"), port, &[]);
         std::thread::sleep(std::time::Duration::from_millis(50));
-        server.kill();
-        let server_out = server.wait_and_get_output(false);
+        let server_out = server.kill_and_get_output();
         server_out
             .lines()
             .seek("Client <Unknown> has error: My fail");
@@ -151,8 +152,9 @@ fn refreshing_by_name_works() {
 
     // Refresh one of the watchers to cause the second status report to server
     let mut client_refresher =
-        Subprocess::start_client("client_watcher1", port, &["refresh", "Watcher2"]);
+        Subprocess::start_client("client_refresher", port, &["refresh", "Watcher2"]);
     client_refresher.wait_and_get_output(true);
+    std::thread::sleep(std::time::Duration::from_millis(50));
 
     // Server should see only one report from Watcher1, but two reports from Watcher2, since
     // it has been explicitly refreshed.

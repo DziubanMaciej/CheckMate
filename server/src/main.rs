@@ -103,6 +103,11 @@ async fn main() {
         }
     };
 
+    if config.help {
+        Config::print_help();
+        std::process::exit(0);
+    }
+
     let mut task_id: usize = 0;
 
     let socket_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);

@@ -4,6 +4,7 @@ use check_mate_common::{fetch_arg, fetch_arg_bool, CommandLineError, DEFAULT_POR
 pub struct Config {
     pub server_port: u16,
     pub log_every_status: bool,
+    pub help: bool,
 }
 
 impl Config {
@@ -41,6 +42,9 @@ impl Config {
                         },
                     )?;
                 }
+                "-h" => {
+                    self.help = true;
+                }
                 _ => return Err(CommandLineError::InvalidArgument(arg)),
             }
         }
@@ -52,6 +56,17 @@ impl Config {
         config.parse_options(&mut args)?;
         Ok(config)
     }
+
+    pub fn print_help() {
+        let string = "Usage: check_mate_server [<args>]
+
+Available args:
+    - p <port> - Set TCP port for the server.
+    - e <boolean> - Set whether the server should log every status received from clients or only when it changes.
+    - h - Print this message.
+";
+        println!("{}", string);
+    }
 }
 
 impl Default for Config {
@@ -59,6 +74,7 @@ impl Default for Config {
         Self {
             server_port: DEFAULT_PORT,
             log_every_status: false,
+            help: false,
         }
     }
 }

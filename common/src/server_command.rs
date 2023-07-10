@@ -3,6 +3,7 @@ use std::string::FromUtf8Error;
 /// Command sent from client to server
 #[derive(Debug, PartialEq, Eq)]
 pub enum ServerCommand {
+    // Sent by client
     Abort,
     SetStatusOk,
     SetStatusError(String),
@@ -11,8 +12,9 @@ pub enum ServerCommand {
     RefreshAllClients,
     SetName(String),
 
+    // Sent by server
     Statuses(Vec<String>),
-    Refresh, // TODO remove
+    Refresh,
 }
 
 #[derive(Debug, PartialEq)]

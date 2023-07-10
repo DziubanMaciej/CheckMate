@@ -33,8 +33,7 @@ impl ClientState {
         &self.name
     }
 
-    pub fn get_name_for_logging(&self) -> String {
-        // TODO rename
+    pub fn get_name_or_default(&self) -> String {
         self.name.clone().unwrap_or("<Unknown>".to_owned())
     }
 
@@ -62,7 +61,7 @@ impl ClientState {
             }
             ServerCommand::SetStatusOk => {
                 if self.log_every_status || self.status.is_err() {
-                    println!("Client {} is ok", self.get_name_for_logging());
+                    println!("Client {} is ok", self.get_name_or_default());
                 }
                 self.status = Ok(());
             }
@@ -75,7 +74,7 @@ impl ClientState {
                 if self.log_every_status || is_new_error {
                     println!(
                         "Client {} has error: {}",
-                        self.get_name_for_logging(),
+                        self.get_name_or_default(),
                         self.status.as_ref().unwrap_err()
                     );
                 }

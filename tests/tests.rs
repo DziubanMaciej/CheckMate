@@ -88,9 +88,12 @@ fn read_messages_with_names_works() {
     let mut client_reader = Subprocess::start_client("client_reader", port, &["read", "-i", "1"]);
     let client_reader_out = client_reader.wait_and_get_output(true);
 
-    let lines: Vec<&str> = client_reader_out.lines().collect();
-    assert!(lines.contains(&"<Unknown>: error1")); // TODO this does not check that no other lines are printed.
-    assert!(lines.contains(&"client2: error2"));
+    client_reader_out
+        .lines()
+        .to_collection_counter()
+        .contains("<Unknown>: error1", 1)
+        .contains("client2: error2", 1)
+        .nothing_else();
 }
 
 #[test]
@@ -119,10 +122,12 @@ fn read_messages_with_multiple_clients_works() {
     std::thread::sleep(std::time::Duration::from_millis(50));
     let mut client_reader = Subprocess::start_client("client_reader", port, &["read"]);
     let client_reader_out = client_reader.wait_and_get_output(true);
-
-    let lines: Vec<&str> = client_reader_out.lines().collect();
-    assert!(lines.contains(&"some nice error")); // TODO this does not check that no other lines are printed.
-    assert!(lines.contains(&"some other error"));
+    client_reader_out
+        .lines()
+        .to_collection_counter()
+        .contains("some nice error", 1)
+        .contains("some other error", 1)
+        .nothing_else();
 }
 
 #[test]
@@ -197,8 +202,7 @@ fn refreshing_all_works() {
     std::thread::sleep(std::time::Duration::from_millis(50));
 
     // Refresh both watchers
-    let mut client_refresher =
-        Subprocess::start_client("client_refresher", port, &["refresh_all"]);
+    let mut client_refresher = Subprocess::start_client("client_refresher", port, &["refresh_all"]);
     client_refresher.wait_and_get_output(true);
     std::thread::sleep(std::time::Duration::from_millis(50));
 

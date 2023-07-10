@@ -1,21 +1,15 @@
-// Communications to be made:
-// 1. readMessages:
-//   - one thread sends question to all other threads
-//   - all threads respond
-//
-// 2. refresh
-//   - one thread sends signal to one thread
-//   - it sends something to its client
-//
-// 3. abort
-//   - one thread sends abort to all other threads
-//   - they abort
-//
-// 4. thread creation
-//   - add to list of all threads
-//
-// 5 thread destruction
-//   - remove from list
+// The logic in this file serves for communications between different tasks within the server. For most of the time they can work independently,
+// but they are some operations for which they have to cooperate. All tasks should periodically call process_task_message and handle possible
+// messages from other tasks. Cases to handle
+// 1. Reading statuses:
+//   - one task broadcast a query for status to all other tasks
+//   - all tasks respond with their statuses
+//   - the one task collects all the responses
+// 2. Refreshing clients
+//   - one task broadcasts a refresh instruction to all other tasks. The instruction can be either conditional (by name) or unconditional.
+//   - all tasks check whether they should actually refresh based on their client name
+//   - if a task should refresh, it enqueues a refresh signal to send to its client
+// 3. Task creation/destruction
 
 use crate::client_state::ClientState;
 use check_mate_common::ServerCommand;
@@ -75,7 +69,7 @@ impl TaskCommunication {
             TaskMessage::ReadMessageRequest(sender) => {
                 let message = TaskMessage::ReadMessageResponse(
                     client_state.get_status().clone(),
-                    client_state.get_name_for_logging(),
+                    client_state.get_name_or_default(),
                 );
                 Self::unicast(sender, message).await;
             }
@@ -92,7 +86,7 @@ impl TaskCommunication {
                 client_state
                     .push_command_to_send(ServerCommand::Refresh)
                     .await;
-            } // TaskMessage::Abort => todo!(),
+            }
         }
     }
 

@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::action::{Action, WatchCommandData};
 use check_mate_common::{
     fetch_arg, fetch_arg_and_parse, fetch_arg_bool, fetch_arg_string, CommandLineError,
-    DEFAULT_CONNECTION_BACKOFF, DEFAULT_PORT,
+    DEFAULT_CONNECTION_BACKOFF, DEFAULT_INCLUDE_NAMES, DEFAULT_PORT, DEFAULT_WATCH_INTERVAL,
 };
 
 #[derive(PartialEq, Debug)]
@@ -24,7 +24,7 @@ impl Config {
             CommandLineError::NoValueSpecified("action".to_owned(), "binary name".to_owned()),
         )?;
         let action = match action.as_ref() {
-            "read" => Action::ReadMessages(false),
+            "read" => Action::ReadMessages(DEFAULT_INCLUDE_NAMES),
             "watch" => {
                 let command = fetch_arg(
                     args,
@@ -53,6 +53,7 @@ impl Config {
             }
             "refresh_all" => Action::RefreshAllClients,
             "abort" => Action::Abort,
+            "help" | "-h" => Action::Help,
             _ => return Err(CommandLineError::InvalidValue("action".into(), action)),
         };
         Ok(action)
@@ -145,8 +146,35 @@ impl Config {
     {
         let mut config = Config::default();
         config.action = Config::parse_action(&mut args)?;
-        config.parse_extra_args(&mut args)?;
+        if !matches!(config.action, Action::Help) {
+            // Help action doesn't need any more arguments, just print help and exit
+            config.parse_extra_args(&mut args)?;
+        }
         Ok(config)
+    }
+
+    pub fn print_help() {
+        let default_watch_interval = DEFAULT_WATCH_INTERVAL.as_millis();
+        let default_connection_backoff = DEFAULT_CONNECTION_BACKOFF.as_millis();
+        let string = format!("Usage: check_mate_client <action> [<args>]
+
+Available actions:
+    read - Query error statuses from server
+    watch <command> - Periodically execute <command> and send its output as status to server. First non-empty line in stdout is considered as output and its considered as an error. Empty stdout is considered as a success status.
+    refresh <name> - Instruct the server to notify a client with a name equal to <name> to rerun its command immediately and update the status.
+    refresh_all - Instruct the server to notify all its clients to rerun their commands immediately and update the statuses.
+    abort - Instruct the server to end execution.
+    help - Print this message.
+
+Available arguments:
+    -p <port> - Set TCP port of the server to connect to. Default is {DEFAULT_PORT}.
+    -n <name> - Set name of this client. Name is optional, but makes it easier to identify clients and allows to refresh them by name.
+    -i <boolean> - Only valid with read action. Set whether client names should be printed along with their statuses. Default is {DEFAULT_INCLUDE_NAMES}.
+    -w <milliseconds> - Only valid with watch action. Set interval in milliseconds between invocation of the watched command. Default is {default_watch_interval}ms.
+    -c <milliseconds> - Set backoff time to wait before retrying after unsuccessful connection to the server. Default is {default_connection_backoff}ms.
+");
+
+        println!("{}", string);
     }
 }
 
@@ -301,6 +329,23 @@ mod tests {
         let mut expected = Config::default();
         expected.action = Action::Abort;
         assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn help_action_is_parsed() {
+        fn run(args: &[&str]) {
+            let config = Config::parse(to_owned_string_iter(&args));
+            let config = config.expect("Parsing should succeed");
+
+            let mut expected = Config::default();
+            expected.action = Action::Help;
+            assert_eq!(config, expected);
+        }
+
+        run(&["help"]);
+        run(&["help", "-p", "200"]);
+        run(&["-h"]);
+        run(&["-h", "-n", "client"]);
     }
 
     #[test]

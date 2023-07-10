@@ -35,9 +35,15 @@ async fn main() {
         Ok(x) => x,
         Err(err) => {
             eprintln!("ERROR: {}", err);
+            eprintln!("Use help action for more information.");
             std::process::exit(1);
         }
     };
+
+    if matches!(config.action, action::Action::Help) {
+        Config::print_help();
+        std::process::exit(0);
+    }
 
     let server_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);
 

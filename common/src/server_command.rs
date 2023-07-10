@@ -106,15 +106,15 @@ impl ServerCommand {
             _ => return Err(ServerCommandError::UnknownCommand),
         };
         Ok(ServerCommandParse {
-            command: command,
-            bytes_used: bytes_used,
+            command,
+            bytes_used,
         })
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         fn append_strings(bytes: &mut Vec<u8>, strings: &Vec<String>) {
             let vector_len = &strings.len().to_le_bytes()[0..4];
-            bytes.extend_from_slice(&vector_len);
+            bytes.extend_from_slice(vector_len);
             for string in strings {
                 append_string(bytes, string)
             }
@@ -122,8 +122,8 @@ impl ServerCommand {
         fn append_string(bytes: &mut Vec<u8>, string: &String) {
             let string_bytes = string.as_bytes();
             let string_len = &string_bytes.len().to_le_bytes()[0..4];
-            bytes.extend_from_slice(&string_len);
-            bytes.extend_from_slice(&string_bytes);
+            bytes.extend_from_slice(string_len);
+            bytes.extend_from_slice(string_bytes);
         }
         fn append_bool(bytes: &mut Vec<u8>, bool: &bool) {
             bytes.push(*bool as u8);
@@ -144,13 +144,13 @@ impl ServerCommand {
             }
             ServerCommand::RefreshClientByName(name) => {
                 let mut result = vec![ServerCommand::ID_REFRESH_CLIENT_BY_NAME];
-                append_string(&mut result, &name);
+                append_string(&mut result, name);
                 result
             }
             ServerCommand::RefreshAllClients => vec![ServerCommand::ID_REFRESH_ALL_CLIENTS],
             ServerCommand::SetName(name) => {
                 let mut result = vec![ServerCommand::ID_SET_NAME];
-                append_string(&mut result, &name);
+                append_string(&mut result, name);
                 result
             }
             ServerCommand::Statuses(statuses) => {

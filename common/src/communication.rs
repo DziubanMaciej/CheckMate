@@ -38,11 +38,11 @@ impl ServerCommand {
     ) -> Result<ServerCommand, CommunicationError> {
         loop {
             let buffer = input_stream.fill_buf().await?;
-            if buffer.len() == 0 {
+            if buffer.is_empty() {
                 return Err(CommunicationError::ClientDisconnected);
             }
 
-            match ServerCommand::from_bytes(&buffer) {
+            match ServerCommand::from_bytes(buffer) {
                 Ok(parse_result) => {
                     input_stream.consume(parse_result.bytes_used);
                     break Ok(parse_result.command);

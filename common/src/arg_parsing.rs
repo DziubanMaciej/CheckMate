@@ -28,7 +28,7 @@ pub fn fetch_arg<T: Iterator<Item = String>>(
 ) -> Result<String, CommandLineError> {
     match args.next() {
         Some(x) => Ok(x),
-        None => return Err(on_error),
+        None => Err(on_error),
     }
 }
 

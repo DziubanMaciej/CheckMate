@@ -123,12 +123,12 @@ impl TaskCommunication {
         // we just ignore all send/receive errors.
         Self::broadcast(
             task_id,
-            &mut data,
+            &data,
             TaskMessage::ReadMessageRequest(sender.clone()),
         )
         .await;
 
-        let result = Self::collect(task_id, &mut data, receiver)
+        Self::collect(task_id, &mut data, receiver)
             .await
             .into_iter()
             .filter_map(|message| match message {
@@ -143,9 +143,7 @@ impl TaskCommunication {
                 },
                 _ => panic!("Unexpected message received"),
             })
-            .collect();
-
-        result
+            .collect()
     }
 
     async fn broadcast(task_id: usize, data: &PerThreadDataMap, message: TaskMessage) {

@@ -31,7 +31,7 @@ impl Config {
                     CommandLineError::NoValueSpecified("command to run".to_owned(), action),
                 )?;
                 let mut command_args = Vec::new();
-                while let Some(arg) = args.next() {
+                for arg in args.by_ref() {
                     if arg != "--" {
                         command_args.push(arg);
                     } else {
@@ -59,12 +59,7 @@ impl Config {
         &mut self,
         args: &mut T,
     ) -> Result<(), CommandLineError> {
-        loop {
-            let arg = match args.next() {
-                Some(x) => x,
-                None => break,
-            };
-
+        while let Some(arg) = args.next() {
             match arg.as_ref() {
                 "-p" => {
                     self.server_port = fetch_arg_and_parse(
@@ -140,8 +135,10 @@ impl Config {
     where
         T: Iterator<Item = String>,
     {
-        let mut config = Config::default();
-        config.action = Config::parse_action(&mut args)?;
+        let mut config = Config {
+            action: Config::parse_action(&mut args)?,
+            ..Default::default()
+        };
         if !matches!(config.action, Action::Help) {
             // Help action doesn't need any more arguments, just print help and exit
             config.parse_extra_args(&mut args)?;

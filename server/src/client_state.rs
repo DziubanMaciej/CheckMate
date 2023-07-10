@@ -18,7 +18,7 @@ pub enum ProcessCommandResult {
 impl ClientState {
     pub fn new(log_every_status: bool) -> Self {
         ClientState {
-            log_every_status: log_every_status,
+            log_every_status,
             name: None,
             status: Ok(()),
             messages_to_send_queue: channel(2),

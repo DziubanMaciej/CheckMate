@@ -12,12 +12,7 @@ impl Config {
         &mut self,
         args: &mut T,
     ) -> Result<(), CommandLineError> {
-        loop {
-            let arg = match args.next() {
-                Some(x) => x,
-                None => break,
-            };
-
+        while let Some(arg) = args.next() {
             match arg.as_ref() {
                 "-p" => {
                     let port =

@@ -32,10 +32,7 @@ impl WatchCommandData {
 
 impl Action {
     pub fn should_reconnect(&self) -> bool {
-        match self {
-            Self::WatchCommand(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::WatchCommand(_))
     }
 
     pub async fn execute(
@@ -95,17 +92,17 @@ impl Action {
         input_stream: &mut (impl AsyncBufRead + Unpin),
         output_stream: &mut (impl AsyncWrite + Unpin),
         command: &str,
-        command_args: &Vec<String>,
+        command_args: &[String],
         interval: Duration,
     ) -> Result<(), CommunicationError> {
         async fn do_watch(
             output_stream: &mut (impl AsyncWrite + Unpin),
             command: &str,
-            command_args: &Vec<String>,
+            command_args: &[String],
         ) -> Result<(), CommunicationError> {
             // Run command to get its output
             let command = command.to_string();
-            let command_args = command_args.clone();
+            let command_args = command_args.to_owned();
             let command_output = tokio::task::spawn_blocking(move || {
                 Action::execute_command(&command, &command_args)
             })
@@ -197,11 +194,9 @@ impl Action {
         };
 
         let subprocess_out = String::from_utf8(subprocess_out);
-        let subprocess_out = match subprocess_out {
+        match subprocess_out {
             Ok(x) => x,
-            Err(err) => return err.to_string(),
-        };
-
-        subprocess_out
+            Err(err) => err.to_string(),
+        }
     }
 }

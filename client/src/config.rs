@@ -31,15 +31,11 @@ impl Config {
                     CommandLineError::NoValueSpecified("command to run".to_owned(), action),
                 )?;
                 let mut command_args = Vec::new();
-                loop {
-                    if let Some(arg) = args.next() {
-                        if arg != "--" {
-                            command_args.push(arg);
-                        } else {
-                            break; // end of watch args
-                        }
+                while let Some(arg) = args.next() {
+                    if arg != "--" {
+                        command_args.push(arg);
                     } else {
-                        break; // no more args
+                        break; // end of watch args
                     }
                 }
                 Action::WatchCommand(WatchCommandData::new(command, command_args))

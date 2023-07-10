@@ -48,10 +48,9 @@ pub enum TaskMessage {
 impl TaskCommunication {
     pub fn new() -> Self {
         let result = PerThreadDataMap::new();
-        let result = TaskCommunication {
+        TaskCommunication {
             locked_data: Arc::new(Mutex::new(result)),
-        };
-        result
+        }
     }
 
     pub async fn register_task(&mut self, task_id: usize, sender: Sender<TaskMessage>) {

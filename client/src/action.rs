@@ -65,7 +65,7 @@ impl Action {
             }
             Action::RefreshAllClients => Self::refresh_all_clients(output_stream).await,
             Action::Abort => Self::abort(output_stream).await,
-            Action::Help => panic!("Cannot execute help action")
+            Action::Help => panic!("Cannot execute help action"),
         }
     }
 
@@ -103,11 +103,7 @@ impl Action {
             // Run command to get its output
             let command = command.to_string();
             let command_args = command_args.to_owned();
-            let command_output = tokio::task::spawn_blocking(move || {
-                Action::execute_command(&command, &command_args)
-            })
-            .await;
-            let command_output = command_output.expect("JoinError is unexpected for watch");
+            let command_output = Action::execute_command(&command, &command_args).await;
             let command_output = command_output
                 .lines()
                 .filter(|line| !line.trim().is_empty())
@@ -169,9 +165,8 @@ impl Action {
         command.send_async(output_stream).await
     }
 
-    fn execute_command(command: &str, command_args: &Vec<String>) -> String {
-        // TODO convert to async
-        let subprocess = std::process::Command::new(command)
+    async fn execute_command(command: &str, command_args: &Vec<String>) -> String {
+        let subprocess = tokio::process::Command::new(command)
             .args(command_args)
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -181,7 +176,7 @@ impl Action {
             Err(err) => return err.to_string(),
         };
 
-        let subprocess_result = subprocess.wait_with_output();
+        let subprocess_result = subprocess.wait_with_output().await;
         let subprocess_result = match subprocess_result {
             Ok(x) => x,
             Err(err) => return err.to_string(),

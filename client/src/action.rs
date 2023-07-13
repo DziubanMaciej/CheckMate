@@ -1,5 +1,5 @@
 use crate::config::Config;
-use check_mate_common::{CommunicationError, ServerCommand, DEFAULT_WATCH_INTERVAL};
+use check_mate_common::{CommunicationError, ServerCommand, DEFAULT_SHELL, DEFAULT_WATCH_INTERVAL};
 use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncWrite};
 
@@ -18,6 +18,7 @@ pub struct WatchCommandData {
     pub command: String,
     pub command_args: Vec<String>,
     pub interval: Duration,
+    pub shell: bool,
 }
 
 impl WatchCommandData {
@@ -26,6 +27,7 @@ impl WatchCommandData {
             command,
             command_args,
             interval: DEFAULT_WATCH_INTERVAL,
+            shell: DEFAULT_SHELL,
         }
     }
 }
@@ -50,16 +52,7 @@ impl Action {
             Action::ReadMessages(include_names) => {
                 Self::read(input_stream, output_stream, *include_names).await
             }
-            Action::WatchCommand(data) => {
-                Self::watch(
-                    input_stream,
-                    output_stream,
-                    &data.command,
-                    &data.command_args,
-                    data.interval,
-                )
-                .await
-            }
+            Action::WatchCommand(data) => Self::watch(input_stream, output_stream, data).await,
             Action::RefreshClientByName(name) => {
                 Self::refresh_client_by_name(output_stream, name).await
             }
@@ -91,19 +84,16 @@ impl Action {
     async fn watch(
         input_stream: &mut (impl AsyncBufRead + Unpin),
         output_stream: &mut (impl AsyncWrite + Unpin),
-        command: &str,
-        command_args: &[String],
-        interval: Duration,
+        data: &WatchCommandData,
     ) -> Result<(), CommunicationError> {
         async fn do_watch(
             output_stream: &mut (impl AsyncWrite + Unpin),
-            command: &str,
-            command_args: &[String],
+            data: &WatchCommandData,
         ) -> Result<(), CommunicationError> {
             // Run command to get its output
-            let command = command.to_string();
-            let command_args = command_args.to_owned();
-            let command_output = Action::execute_command(&command, &command_args).await;
+            let command = data.command.to_string();
+            let command_args = data.command_args.to_owned();
+            let command_output = Action::execute_command(&command, &command_args, data.shell).await;
             let command_output = command_output
                 .lines()
                 .filter(|line| !line.trim().is_empty())
@@ -124,12 +114,12 @@ impl Action {
         }
 
         // Run first iteration immediately
-        do_watch(output_stream, command, command_args).await?;
+        do_watch(output_stream, data).await?;
 
         loop {
             // Wait for either watch interval or refresh signal from server
             tokio::select! {
-                _ = tokio::time::sleep(interval) => (),
+                _ = tokio::time::sleep(data.interval) => (),
                 server_command = ServerCommand::receive_async(input_stream) => {
                     match server_command? {
                         ServerCommand::Refresh => (),
@@ -139,7 +129,7 @@ impl Action {
             }
 
             // Execute command
-            do_watch(output_stream, command, command_args).await?;
+            do_watch(output_stream, data).await?;
         }
     }
 
@@ -165,9 +155,18 @@ impl Action {
         command.send_async(output_stream).await
     }
 
-    async fn execute_command(command: &str, command_args: &Vec<String>) -> String {
-        let subprocess = tokio::process::Command::new(command)
-            .args(command_args)
+    async fn execute_command(command: &str, command_args: &Vec<String>, shell: bool) -> String {
+        let mut subprocess;
+        if shell {
+            subprocess = tokio::process::Command::new("sh"); // TODO not really portable...
+            subprocess.arg("-c");
+            let command = format!("{command} {}", command_args.join(" "));
+            subprocess.arg(command);
+        } else {
+            subprocess = tokio::process::Command::new(command);
+            subprocess.args(command_args);
+        };
+        let subprocess = subprocess
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn();

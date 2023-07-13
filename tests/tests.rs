@@ -52,6 +52,31 @@ fn read_messages_with_single_client_works() {
 }
 
 #[test]
+fn watch_command_through_shell_works() {
+    let port = get_port_number();
+    let _server = Subprocess::start_server("server", port, &[]);
+    let _client_watcher = Subprocess::start_client(
+        "client_watcher",
+        port,
+        &[
+            "watch",
+            "echo",
+            "aabbcc",
+            "|sed 's/a/A/g'", // TODO not portable
+            "--",
+            "-s",
+            "1",
+        ],
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    let mut client_reader = Subprocess::start_client("client_reader", port, &["read"]);
+    let client_reader_out = client_reader.wait_and_get_output(true);
+    assert_eq!(client_reader_out, "AAbbcc\n");
+}
+
+#[test]
 fn client_reconnects_when_server_restarts() {
     // TODO this test may fail sporadically due to the sleep being to short. I should make it smarter...
 

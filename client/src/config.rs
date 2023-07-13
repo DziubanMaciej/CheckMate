@@ -3,7 +3,8 @@ use std::time::Duration;
 use crate::action::{Action, WatchCommandData};
 use check_mate_common::{
     fetch_arg, fetch_arg_and_parse, fetch_arg_bool, fetch_arg_string, CommandLineError,
-    DEFAULT_CONNECTION_BACKOFF, DEFAULT_INCLUDE_NAMES, DEFAULT_PORT, DEFAULT_WATCH_INTERVAL,
+    DEFAULT_CONNECTION_BACKOFF, DEFAULT_INCLUDE_NAMES, DEFAULT_PORT, DEFAULT_SHELL,
+    DEFAULT_WATCH_INTERVAL,
 };
 
 #[derive(PartialEq, Debug)]
@@ -125,6 +126,22 @@ impl Config {
                     )?;
                     self.server_connection_backoff = Duration::from_millis(duration);
                 }
+                "-s" => {
+                    let shell = match self.action {
+                        Action::WatchCommand(ref mut data) => &mut data.shell,
+                        _ => return Err(CommandLineError::InvalidArgument(arg)),
+                    };
+                    *shell = fetch_arg_bool(
+                        args,
+                        || {
+                            CommandLineError::NoValueSpecified(
+                                "a boolean value".into(),
+                                arg.clone(),
+                            )
+                        },
+                        |value| CommandLineError::InvalidValue("shell".into(), value.into()),
+                    )?;
+                }
                 _ => return Err(CommandLineError::InvalidArgument(arg)),
             }
         }
@@ -164,6 +181,7 @@ Available arguments:
     -n <name> - Set name of this client. Name is optional, but makes it easier to identify clients and allows to refresh them by name.
     -i <boolean> - Only valid with read action. Set whether client names should be printed along with their statuses. Default is {DEFAULT_INCLUDE_NAMES}.
     -w <milliseconds> - Only valid with watch action. Set interval in milliseconds between invocation of the watched command. Default is {default_watch_interval}ms.
+    -s <shell> - Only valid with watch action. Set whether the watched command should be invoked through default OS shell. Default is {DEFAULT_SHELL}.
     -c <milliseconds> - Set backoff time to wait before retrying after unsuccessful connection to the server. Default is {default_connection_backoff}ms.
 ");
 
@@ -289,6 +307,41 @@ mod tests {
         ));
         expected.server_port = 100;
         assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn watch_action_with_shell_argument_is_parsed() {
+        fn run(value: &str, value_bool: bool) {
+            let args = ["watch", "echo", "a", "--", "-s", value];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let config = config.expect("Parsing should succeed");
+
+            let mut watch_command_data =
+                WatchCommandData::new("echo".to_string(), vec!["a".to_string()]);
+            watch_command_data.shell = value_bool;
+            let mut expected = Config::default();
+            expected.action = Action::WatchCommand(watch_command_data);
+            assert_eq!(config, expected);
+        }
+        run("0", false);
+        run("false", false);
+        run("1", true);
+        run("true", true);
+    }
+
+    #[test]
+    fn watch_action_with_shell_argument_should_fail() {
+        fn run(value: &str) {
+            let args = ["watch", "echo", "a", "--", "-s", value];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let err = config.expect_err("Parsing should fail");
+            let expected = CommandLineError::InvalidValue("shell".into(), value.into());
+            assert_eq!(err, expected);
+        }
+        run("aa");
+        run("");
+        run("1.");
+        run("1 .");
     }
 
     #[test]

@@ -2,9 +2,8 @@ use std::time::Duration;
 
 use crate::action::{Action, WatchCommandData};
 use check_mate_common::{
-    fetch_arg, fetch_arg_and_parse, fetch_arg_bool, fetch_arg_string, CommandLineError,
-    DEFAULT_CONNECTION_BACKOFF, DEFAULT_INCLUDE_NAMES, DEFAULT_PORT, DEFAULT_SHELL,
-    DEFAULT_WATCH_INTERVAL,
+    constants::*, fetch_arg, fetch_arg_and_parse, fetch_arg_bool, fetch_arg_string,
+    CommandLineError,
 };
 
 #[derive(PartialEq, Debug)]

@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicU16, Ordering};
 
-static PORT_NUMBER: AtomicU16 = AtomicU16::new(check_mate_common::DEFAULT_PORT);
+static PORT_NUMBER: AtomicU16 = AtomicU16::new(check_mate_common::constants::DEFAULT_PORT);
 
 pub fn get_port_number() -> u16 {
     // This is needed, because every integration test is run in a separate thread simultaneously, so we have to ensure

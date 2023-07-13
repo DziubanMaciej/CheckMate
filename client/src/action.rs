@@ -1,5 +1,5 @@
 use crate::config::Config;
-use check_mate_common::{CommunicationError, ServerCommand, DEFAULT_SHELL, DEFAULT_WATCH_INTERVAL};
+use check_mate_common::{constants::*, CommunicationError, ServerCommand};
 use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncWrite};
 

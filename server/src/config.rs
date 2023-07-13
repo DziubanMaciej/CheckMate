@@ -1,4 +1,4 @@
-use check_mate_common::{fetch_arg, fetch_arg_bool, CommandLineError, DEFAULT_PORT};
+use check_mate_common::{constants::*, fetch_arg, fetch_arg_bool, CommandLineError};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Config {

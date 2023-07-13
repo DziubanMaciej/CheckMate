@@ -169,19 +169,31 @@ impl Config {
 
 Available actions:
     read - Query error statuses from server
-    watch <command> - Periodically execute <command> and send its output as status to server. First non-empty line in stdout is considered as output and its considered as an error. Empty stdout is considered as a success status.
-    refresh <name> - Instruct the server to notify a client with a name equal to <name> to rerun its command immediately and update the status.
-    refresh_all - Instruct the server to notify all its clients to rerun their commands immediately and update the statuses.
+    watch <command> - Periodically execute <command> and send its output as status to server. First
+                      non-empty line in stdout is considered as output and its considered as an
+                      error. Empty stdout is considered as a success status.
+    refresh <name> - Instruct the server to notify a client with a name equal to <name> to rerun
+                     its command immediately and update the status.
+    refresh_all - Instruct the server to notify all its clients to rerun their commands immediately
+                  and update the statuses.
     abort - Instruct the server to end execution.
     help - Print this message.
 
-Available arguments:
+There is a number of additional arguments that can be passed to the client. Some of them are
+action-specific and will not work with other actions. Arguments are specified after
+action. For watch action, an additional '--' separator is neccessary to divide the command
+arguments and CheckMate arguments. Available arguments:
     -p <port> - Set TCP port of the server to connect to. Default is {DEFAULT_PORT}.
-    -n <name> - Set name of this client. Name is optional, but makes it easier to identify clients and allows to refresh them by name.
-    -i <boolean> - Only valid with read action. Set whether client names should be printed along with their statuses. Default is {DEFAULT_INCLUDE_NAMES}.
-    -w <milliseconds> - Only valid with watch action. Set interval in milliseconds between invocation of the watched command. Default is {default_watch_interval}ms.
-    -s <shell> - Only valid with watch action. Set whether the watched command should be invoked through default OS shell. Default is {DEFAULT_SHELL}.
-    -c <milliseconds> - Set backoff time to wait before retrying after unsuccessful connection to the server. Default is {default_connection_backoff}ms.
+    -n <name> - Set name of this client. Name is optional, but makes it easier to identify clients
+                and allows to refresh them by name.
+    -i <boolean> - Only valid with read action. Set whether client names should be printed along with
+                   their statuses. Default is {DEFAULT_INCLUDE_NAMES}.
+    -w <milliseconds> - Only valid with watch action. Set interval in milliseconds between invocation
+                        of the watched command. Default is {default_watch_interval}ms.
+    -s <shell> - Only valid with watch action. Set whether the watched command should be invoked
+                 through default OS shell. Default is {DEFAULT_SHELL}.
+    -c <milliseconds> - Set backoff time to wait before retrying after unsuccessful connection to
+                        the server. Default is {default_connection_backoff}ms.
 ");
 
         println!("{}", string);

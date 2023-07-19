@@ -54,9 +54,3 @@ Standard building procedure for Rust projects:
     4. Call `cargo build`
     5. Compiled binaries will be in `target/release` directory
 
-# TODO
-Add release
-Think of a name in crates.io. CheckMate is taken
-Learn how to install crates
-Upload a crate
-Make better integration tests

@@ -172,7 +172,12 @@ impl Action {
             .spawn();
         let subprocess = match subprocess {
             Ok(x) => x,
-            Err(err) => return err.to_string(),
+            Err(err) => {
+                return match err.kind() {
+                    std::io::ErrorKind::NotFound => format!("Executable \"{command}\" not found"),
+                    _ => err.to_string(),
+                };
+            }
         };
 
         let subprocess_result = subprocess.wait_with_output().await;

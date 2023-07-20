@@ -98,6 +98,27 @@ fn client_reconnects_when_server_restarts() {
 }
 
 #[test]
+fn when_invalid_command_is_used_it_should_be_contained_in_error_status() {
+    let port = get_port_number();
+    let _server = Subprocess::start_server("server", port, &[]);
+    let _client_watcher = Subprocess::start_client(
+        "client_watcher",
+        port,
+        &[
+            "watch",
+            "echo aaa eee",
+            "\n\n\n \nsome nice error\nsecond line ignored",
+        ],
+    );
+
+    std::thread::sleep(std::time::Duration::from_millis(50));
+
+    let mut client_reader = Subprocess::start_client("client_reader", port, &["read"]);
+    let client_reader_out = client_reader.wait_and_get_output(true);
+    assert!(client_reader_out.contains("\"echo aaa eee\""));
+}
+
+#[test]
 fn read_messages_with_names_works() {
     let port = get_port_number();
     let _server = Subprocess::start_server("server", port, &[]);

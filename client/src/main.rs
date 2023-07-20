@@ -12,19 +12,21 @@ use config::Config;
 async fn connect_to_server(
     server_address: SocketAddrV4,
     connection_backoff: Duration,
-) -> TcpStream {
+    connection_attemps: u32,
+) -> Option<TcpStream> {
+    let mut attempts_made: u32 = 0;
     loop {
-        let tcp_stream = match TcpStream::connect(server_address).await {
-            Ok(ok) => ok,
+        attempts_made += 1;
+        match TcpStream::connect(server_address).await {
+            Ok(ok) => break Some(ok),
             Err(err) => {
-                eprintln!("Failed to connect with server: {}. Keep waiting.", err);
-                if !connection_backoff.is_zero() {
-                    tokio::time::sleep(connection_backoff).await;
+                if connection_attemps > 0 && attempts_made == connection_attemps {
+                    break None;
                 }
-                continue;
+                eprintln!("Failed to connect with server: {}. Keep waiting.", err);
+                tokio::time::sleep(connection_backoff).await;
             }
         };
-        return tcp_stream;
     }
 }
 
@@ -48,8 +50,17 @@ async fn main() {
     let server_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);
 
     loop {
-        // Connect to server and prepare IO streams
-        let tcp_stream = connect_to_server(server_address, config.server_connection_backoff).await;
+        // Connect to server
+        let tcp_stream = connect_to_server(server_address, config.server_connection_backoff, config.server_connection_attempts).await;
+        let tcp_stream = match tcp_stream {
+            Some(some) => some,
+            None => {
+                eprintln!("Failed to connect with server. Aborting.");
+                std::process::exit(1);
+            }
+        };
+
+        // Prepare IO streams
         let (input_stream, mut output_stream) = tcp_stream.into_split();
         let mut input_stream = BufReader::new(input_stream);
 

@@ -12,6 +12,7 @@ pub struct Config {
     pub server_port: u16,
     pub client_name: Option<String>,
     pub server_connection_backoff: Duration,
+    pub server_connection_attempts: u32,
 }
 
 impl Config {
@@ -139,6 +140,23 @@ impl Config {
                     )?;
                     self.server_connection_backoff = Duration::from_millis(duration);
                 }
+                "-r" => {
+                    self.server_connection_attempts = fetch_arg_and_parse(
+                        args,
+                        || {
+                            CommandLineError::NoValueSpecified(
+                                "number of connection attempts".into(),
+                                arg.clone(),
+                            )
+                        },
+                        |value| {
+                            CommandLineError::InvalidValue(
+                                "number of connection attempts".into(),
+                                value.into(),
+                            )
+                        },
+                    )?;
+                }
                 "-s" => {
                     let shell = match self.action {
                         Action::WatchCommand(ref mut data) => &mut data.shell,
@@ -198,9 +216,9 @@ There is a number of additional arguments that can be passed to the client. Some
 action-specific and will not work with other actions. Arguments are specified after
 action. For watch action, an additional '--' separator is neccessary to divide the command
 arguments and CheckMate arguments. Available arguments:
-    -p <port> - Set TCP port of the server to connect to. Default is {DEFAULT_PORT}.
-    -n <name> - Set name of this client. Name is optional, but makes it easier to identify clients
-                and allows to refresh them by name.
+    -p <number> - Set TCP port of the server to connect to. Default is {DEFAULT_PORT}.
+    -n <string> - Set name of this client. Name is optional, but makes it easier to identify clients
+                  and allows to refresh them by name.
     -i <boolean> - Only valid with read action. Set whether client names should be printed along with
                    their statuses. Default is {DEFAULT_INCLUDE_NAMES}.
     -w <milliseconds> - Only valid with watch action. Set interval in milliseconds between invocation
@@ -211,6 +229,8 @@ arguments and CheckMate arguments. Available arguments:
                    through default OS shell. Default is {DEFAULT_SHELL}.
     -c <milliseconds> - Set backoff time to wait before retrying after unsuccessful connection to
                         the server. Default is {default_connection_backoff}ms.
+    -r <number> - Set the maximum number of attempts to connect to the server. The value of 0
+                  means infinite attempts. Default is {DEFAULT_MAXIMUM_SERVER_CONNECTION_ATTEMPTS}.
 ");
 
         println!("{}", string);
@@ -224,6 +244,7 @@ impl Default for Config {
             server_port: DEFAULT_PORT,
             client_name: None,
             server_connection_backoff: DEFAULT_CONNECTION_BACKOFF,
+            server_connection_attempts: DEFAULT_MAXIMUM_SERVER_CONNECTION_ATTEMPTS,
         }
     }
 }
@@ -435,6 +456,24 @@ mod tests {
     }
 
     #[test]
+    fn custom_connection_attempts_option_is_parsed() {
+        fn run(value_string: &str, value: u32) {
+            let args = ["refresh", "client12", "-r", value_string];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let config = config.expect("Parsing should succeed");
+
+            let mut expected = Config::default();
+            expected.action = Action::RefreshClientByName("client12".to_string());
+            expected.server_connection_attempts = value;
+            assert_eq!(config, expected);
+        }
+
+        run("0", 0);
+        run("1", 1);
+        run("100", 100);
+    }
+
+    #[test]
     fn custom_client_name_is_parsed() {
         let args = ["refresh", "client12", "-n", "client11"];
         let config = Config::parse(to_owned_string_iter(&args));
@@ -544,6 +583,19 @@ mod tests {
     }
 
     #[test]
+    fn no_connection_attempts_number_error_is_returned() {
+        let args = ["read", "-r"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected = CommandLineError::NoValueSpecified(
+            "number of connection attempts".to_string(),
+            "-r".to_string(),
+        );
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
     fn no_server_connection_backoff_error_is_returned() {
         let args = ["read", "-c"];
         let config = Config::parse(to_owned_string_iter(&args));
@@ -634,6 +686,25 @@ mod tests {
             let expected = CommandLineError::InvalidValue("port".to_string(), "2000d".to_string());
             assert_eq!(parse_error, expected);
         }
+    }
+
+    #[test]
+    fn invalid_number_of_connection_attemps_error_is_returned() {
+        fn run(value: &str) {
+            let args = ["read", "-r", value];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let parse_error = config.expect_err("Parsing should not succeed");
+
+            let expected = CommandLineError::InvalidValue(
+                "number of connection attempts".to_string(),
+                value.to_string(),
+            );
+            assert_eq!(parse_error, expected);
+        }
+        run("");
+        run("-1");
+        run("ss");
+        run("200d");
     }
 
     #[test]

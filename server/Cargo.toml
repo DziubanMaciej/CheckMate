@@ -1,10 +1,10 @@
 [package]
 name = "check_mate_server"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-check_mate_common = { version = "0.1.0", path = "../common" }
+check_mate_common = { version = "0.2.0", path = "../common" }
 tokio = { version = "1", features = ["full"] }

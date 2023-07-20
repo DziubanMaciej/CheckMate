@@ -107,6 +107,20 @@ impl Config {
                     )?;
                     data.interval = Duration::from_millis(interval);
                 }
+                "-d" => {
+                    let data = match self.action {
+                        Action::WatchCommand(ref mut data) => data,
+                        _ => return Err(CommandLineError::InvalidArgument(arg)),
+                    };
+                    let delay: u64 = fetch_arg_and_parse(
+                        args,
+                        || CommandLineError::NoValueSpecified("initial delay".into(), arg.clone()),
+                        |value| {
+                            CommandLineError::InvalidValue("initial delay".into(), value.into())
+                        },
+                    )?;
+                    data.delay = Duration::from_millis(delay);
+                }
                 "-c" => {
                     let duration: u64 = fetch_arg_and_parse(
                         args,
@@ -165,6 +179,7 @@ impl Config {
     pub fn print_help() {
         let default_watch_interval = DEFAULT_WATCH_INTERVAL.as_millis();
         let default_connection_backoff = DEFAULT_CONNECTION_BACKOFF.as_millis();
+        let default_delay = DEFAULT_WATCH_DELAY.as_millis();
         let string = format!("Usage: check_mate_client <action> [<args>]
 
 Available actions:
@@ -190,6 +205,8 @@ arguments and CheckMate arguments. Available arguments:
                    their statuses. Default is {DEFAULT_INCLUDE_NAMES}.
     -w <milliseconds> - Only valid with watch action. Set interval in milliseconds between invocation
                         of the watched command. Default is {default_watch_interval}ms.
+    -d <milliseconds> - Only valid with watch action. Set delay in milliseconds before the watched
+                        command is called for the first time. Default is {default_delay}ms.
     -s <boolean> - Only valid with watch action. Set whether the watched command should be invoked
                    through default OS shell. Default is {DEFAULT_SHELL}.
     -c <milliseconds> - Set backoff time to wait before retrying after unsuccessful connection to
@@ -455,6 +472,19 @@ mod tests {
     }
 
     #[test]
+    fn watch_initial_delay_is_parsed() {
+        let args = ["watch", "echo", "--", "-d", "123"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let mut expected = Config::default();
+        let mut watch_command_data = WatchCommandData::new("echo".into(), Vec::new());
+        watch_command_data.delay = Duration::from_millis(123);
+        expected.action = Action::WatchCommand(watch_command_data);
+        assert_eq!(config, expected);
+    }
+
+    #[test]
     fn multiple_custom_args_are_parsed() {
         let args = [
             "refresh", "client12", "-n", "client11", "-p", "120", "-c", "400",
@@ -532,6 +562,17 @@ mod tests {
 
         let expected =
             CommandLineError::NoValueSpecified("watch interval".to_string(), "-w".to_string());
+        assert_eq!(parse_error, expected);
+    }
+
+    #[test]
+    fn no_initial_delay_error_is_returned() {
+        let args = ["watch", "echo", "--", "-d"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let parse_error = config.expect_err("Parsing should not succeed");
+
+        let expected =
+            CommandLineError::NoValueSpecified("initial delay".to_string(), "-d".to_string());
         assert_eq!(parse_error, expected);
     }
 
@@ -622,6 +663,24 @@ mod tests {
 
             let expected =
                 CommandLineError::InvalidValue("watch interval".to_string(), value.to_string());
+            assert_eq!(parse_error, expected);
+        }
+        run(" ");
+        run("");
+        run("40f");
+        run("40 f");
+        run("abc");
+    }
+
+    #[test]
+    fn invalid_initial_delay_error_is_returned() {
+        fn run(value: &str) {
+            let args = ["watch", "echo", "--", "-d", value];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let parse_error = config.expect_err("Parsing should not succeed");
+
+            let expected =
+                CommandLineError::InvalidValue("initial delay".to_string(), value.to_string());
             assert_eq!(parse_error, expected);
         }
         run(" ");

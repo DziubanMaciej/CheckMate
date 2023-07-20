@@ -19,6 +19,7 @@ pub struct WatchCommandData {
     pub command_args: Vec<String>,
     pub interval: Duration,
     pub shell: bool,
+    pub delay : Duration
 }
 
 impl WatchCommandData {
@@ -28,6 +29,7 @@ impl WatchCommandData {
             command_args,
             interval: DEFAULT_WATCH_INTERVAL,
             shell: DEFAULT_SHELL,
+            delay : DEFAULT_WATCH_DELAY,
         }
     }
 }
@@ -113,7 +115,8 @@ impl Action {
             Ok(())
         }
 
-        // Run first iteration immediately
+        // Run first iteration
+        tokio::time::sleep(data.delay).await;
         do_watch(output_stream, data).await?;
 
         loop {

@@ -6,7 +6,7 @@ use tokio::{io::BufReader, net::TcpStream};
 mod action;
 mod config;
 
-use check_mate_common::CommunicationError;
+use check_mate_common::{constants::*, CommunicationError};
 use config::Config;
 
 async fn connect_to_server(
@@ -42,16 +42,29 @@ async fn main() {
         }
     };
 
-    if matches!(config.action, action::Action::Help) {
-        Config::print_help();
-        std::process::exit(0);
+    // Handle simple actions, which do not require connecting to the server
+    match config.action {
+        action::Action::Help => {
+            Config::print_help();
+            std::process::exit(0);
+        }
+        action::Action::Version => {
+            println!("{VERSION}");
+            std::process::exit(0);
+        }
+        _ => (),
     }
 
     let server_address = SocketAddrV4::new(Ipv4Addr::LOCALHOST, config.server_port);
 
     loop {
         // Connect to server
-        let tcp_stream = connect_to_server(server_address, config.server_connection_backoff, config.server_connection_attempts).await;
+        let tcp_stream = connect_to_server(
+            server_address,
+            config.server_connection_backoff,
+            config.server_connection_attempts,
+        )
+        .await;
         let tcp_stream = match tcp_stream {
             Some(some) => some,
             None => {

@@ -11,6 +11,7 @@ pub enum Action {
     RefreshAllClients,
     Abort,
     Help,
+    Version,
 }
 
 #[derive(PartialEq, Debug)]
@@ -61,6 +62,7 @@ impl Action {
             Action::RefreshAllClients => Self::refresh_all_clients(output_stream).await,
             Action::Abort => Self::abort(output_stream).await,
             Action::Help => panic!("Cannot execute help action"),
+            Action::Version => panic!("Cannot execute version action"),
         }
     }
 

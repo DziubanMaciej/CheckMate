@@ -51,6 +51,7 @@ impl Config {
             "refresh_all" => Action::RefreshAllClients,
             "abort" => Action::Abort,
             "help" | "-h" => Action::Help,
+            "version" | "-v" => Action::Version,
             _ => return Err(CommandLineError::InvalidValue("action".into(), action)),
         };
         Ok(action)
@@ -187,7 +188,7 @@ impl Config {
             action: Config::parse_action(&mut args)?,
             ..Default::default()
         };
-        if !matches!(config.action, Action::Help) {
+        if !matches!(config.action, Action::Help | Action::Version) {
             // Help action doesn't need any more arguments, just print help and exit
             config.parse_extra_args(&mut args)?;
         }
@@ -211,6 +212,7 @@ Available actions:
                   and update the statuses.
     abort - Instruct the server to end execution.
     help - Print this message.
+    version - Print version.
 
 There is a number of additional arguments that can be passed to the client. Some of them are
 action-specific and will not work with other actions. Arguments are specified after
@@ -441,6 +443,23 @@ mod tests {
         run(&["help", "-p", "200"]);
         run(&["-h"]);
         run(&["-h", "-n", "client"]);
+    }
+
+    #[test]
+    fn version_action_is_parsed() {
+        fn run(args: &[&str]) {
+            let config = Config::parse(to_owned_string_iter(&args));
+            let config = config.expect("Parsing should succeed");
+
+            let mut expected = Config::default();
+            expected.action = Action::Version;
+            assert_eq!(config, expected);
+        }
+
+        run(&["version"]);
+        run(&["version", "-p", "200"]);
+        run(&["-v"]);
+        run(&["-v", "-n", "client"]);
     }
 
     #[test]

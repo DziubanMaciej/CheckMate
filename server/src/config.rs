@@ -5,6 +5,7 @@ pub struct Config {
     pub server_port: u16,
     pub log_every_status: bool,
     pub help: bool,
+    pub version: bool,
 }
 
 impl Config {
@@ -40,6 +41,9 @@ impl Config {
                 "-h" => {
                     self.help = true;
                 }
+                "-v" => {
+                    self.version = true;
+                }
                 _ => return Err(CommandLineError::InvalidArgument(arg)),
             }
         }
@@ -60,6 +64,7 @@ Available args:
     - e <boolean> - Set whether the server should log every status received from clients or only
                     when it changes. Default is {DEFAULT_LOG_EVERY_STATUS}.
     - h - Print this message.
+    - v - Print version.
 ");
         println!("{}", string);
     }
@@ -71,6 +76,7 @@ impl Default for Config {
             server_port: DEFAULT_PORT,
             log_every_status: DEFAULT_LOG_EVERY_STATUS,
             help: false,
+            version : false,
         }
     }
 }

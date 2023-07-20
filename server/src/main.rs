@@ -2,7 +2,7 @@ mod client_state;
 mod config;
 mod task_communication;
 
-use check_mate_common::{CommunicationError, ServerCommand};
+use check_mate_common::{CommunicationError, ServerCommand, constants::*};
 use client_state::ClientState;
 use config::Config;
 use std::net::{Ipv4Addr, SocketAddrV4};
@@ -114,6 +114,10 @@ async fn main() {
 
     if config.help {
         Config::print_help();
+        std::process::exit(0);
+    }
+    if config.version {
+        println!("{VERSION}");
         std::process::exit(0);
     }
 

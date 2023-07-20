@@ -190,8 +190,8 @@ arguments and CheckMate arguments. Available arguments:
                    their statuses. Default is {DEFAULT_INCLUDE_NAMES}.
     -w <milliseconds> - Only valid with watch action. Set interval in milliseconds between invocation
                         of the watched command. Default is {default_watch_interval}ms.
-    -s <shell> - Only valid with watch action. Set whether the watched command should be invoked
-                 through default OS shell. Default is {DEFAULT_SHELL}.
+    -s <boolean> - Only valid with watch action. Set whether the watched command should be invoked
+                   through default OS shell. Default is {DEFAULT_SHELL}.
     -c <milliseconds> - Set backoff time to wait before retrying after unsuccessful connection to
                         the server. Default is {default_connection_backoff}ms.
 ");

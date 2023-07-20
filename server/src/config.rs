@@ -53,13 +53,14 @@ impl Config {
     }
 
     pub fn print_help() {
-        let string = "Usage: check_mate_server [<args>]
+        let string = format!("Usage: check_mate_server [<args>]
 
 Available args:
-    - p <port> - Set TCP port for the server.
-    - e <boolean> - Set whether the server should log every status received from clients or only when it changes.
+    - p <port> - Set TCP port for the server. Default is {DEFAULT_PORT}.
+    - e <boolean> - Set whether the server should log every status received from clients or only
+                    when it changes. Default is {DEFAULT_LOG_EVERY_STATUS}.
     - h - Print this message.
-";
+");
         println!("{}", string);
     }
 }
@@ -68,7 +69,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             server_port: DEFAULT_PORT,
-            log_every_status: false,
+            log_every_status: DEFAULT_LOG_EVERY_STATUS,
             help: false,
         }
     }

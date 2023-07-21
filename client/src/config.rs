@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::action::{Action, WatchCommandData};
 use check_mate_common::{
     constants::*, fetch_arg, fetch_arg_and_parse, fetch_arg_bool, fetch_arg_string,
-    CommandLineError,
+    format_args_list, format_text, CommandLineError,
 };
 
 #[derive(PartialEq, Debug)]
@@ -196,46 +196,47 @@ impl Config {
     }
 
     pub fn print_help() {
-        let default_watch_interval = DEFAULT_WATCH_INTERVAL.as_millis();
-        let default_connection_backoff = DEFAULT_CONNECTION_BACKOFF.as_millis();
-        let default_delay = DEFAULT_WATCH_DELAY.as_millis();
-        let string = format!("Usage: check_mate_client <action> [<args>]
+        let intro = "Usage: check_mate_client <action> [<args>]";
+        println!("{}\n", format_text(intro, HELP_MESSAGE_MAX_LINE_WIDTH));
 
-Available actions:
-    read - Query error statuses from server
-    watch <command> - Periodically execute <command> and send its output as status to server. First
-                      non-empty line in stdout is considered as output and its considered as an
-                      error. Empty stdout is considered as a success status.
-    refresh <name> - Instruct the server to notify a client with a name equal to <name> to rerun
-                     its command immediately and update the status.
-    refresh_all - Instruct the server to notify all its clients to rerun their commands immediately
-                  and update the statuses.
-    abort - Instruct the server to end execution.
-    help - Print this message.
-    version - Print version.
+        let action_intro = "Available actions:";
+        println!("{}", format_text(action_intro, HELP_MESSAGE_MAX_LINE_WIDTH));
 
-There is a number of additional arguments that can be passed to the client. Some of them are
-action-specific and will not work with other actions. Arguments are specified after
-action. For watch action, an additional '--' separator is neccessary to divide the command
-arguments and CheckMate arguments. Available arguments:
-    -p <number> - Set TCP port of the server to connect to. Default is {DEFAULT_PORT}.
-    -n <string> - Set name of this client. Name is optional, but makes it easier to identify clients
-                  and allows to refresh them by name.
-    -i <boolean> - Only valid with read action. Set whether client names should be printed along with
-                   their statuses. Default is {DEFAULT_INCLUDE_NAMES}.
-    -w <milliseconds> - Only valid with watch action. Set interval in milliseconds between invocation
-                        of the watched command. Default is {default_watch_interval}ms.
-    -d <milliseconds> - Only valid with watch action. Set delay in milliseconds before the watched
-                        command is called for the first time. Default is {default_delay}ms.
-    -s <boolean> - Only valid with watch action. Set whether the watched command should be invoked
-                   through default OS shell. Default is {DEFAULT_SHELL}.
-    -c <milliseconds> - Set backoff time to wait before retrying after unsuccessful connection to
-                        the server. Default is {default_connection_backoff}ms.
-    -r <number> - Set the maximum number of attempts to connect to the server. The value of 0
-                  means infinite attempts. Default is {DEFAULT_MAXIMUM_SERVER_CONNECTION_ATTEMPTS}.
-");
+        let actions = [
+            ("read", "Query error statuses from server".to_owned()),
+            ("watch <command>", "Periodically execute <command> and send its output as status to server. First non-empty line in stdout is considered as output and its considered as an error. Empty stdout is considered as a success status.".to_owned()),
+            ("refresh <name>", "Instruct the server to notify a client with a name equal to <name> to rerun its command immediately and update the status.".to_owned()),
+            ("refresh_all", "Instruct the server to notify all its clients to rerun their commands immediately and update the statuses.".to_owned()),
+            ("abort", "Instruct the server to end execution.".to_owned()),
+            ("help", "Print this message.".to_owned()),
+            ("version", "Print version.".to_owned()),
+        ];
+        println!(
+            "{}\n",
+            format_args_list(&actions, HELP_MESSAGE_BASIC_INDENT_WIDTH, HELP_MESSAGE_MAX_LINE_WIDTH)
+        );
 
-        println!("{}", string);
+        let arguments_intro = "
+            There is a number of additional arguments that can be passed to the client. Some of them are
+            action-specific and will not work with other actions. Arguments are specified after
+            action. For watch action, an additional '--' separator is neccessary to divide the command
+            arguments and CheckMate arguments. Available arguments:";
+        println!("{}", format_text(arguments_intro, HELP_MESSAGE_MAX_LINE_WIDTH));
+
+        let arguments = [
+            ("-p <number>", format!("Set TCP port of the server to connect to. Default is {DEFAULT_PORT}.")),
+            ("-n <string>", "Set name of this client. Name is optional, but makes it easier to identify clients and allows to refresh them by name.".to_owned()),
+            ("-i <boolean>", format!("Only valid with read action. Set whether client names should be printed along with their statuses. Default is {DEFAULT_INCLUDE_NAMES}.", )),
+            ("-w <milliseconds>", format!("Only valid with watch action. Set interval in milliseconds between invocation of the watched command. Default is {}ms.", DEFAULT_WATCH_INTERVAL.as_millis())),
+            ("-d <milliseconds>", format!("Only valid with watch action. Set delay in milliseconds before the watched command is called for the first time. Default is {}ms.", DEFAULT_WATCH_DELAY.as_millis())),
+            ("-s <boolean>", format!("Only valid with watch action. Set whether the watched command should be invoked through default OS shell. Default is {DEFAULT_SHELL}.")),
+            ("-c <milliseconds>", format!("Set backoff time to wait before retrying after unsuccessful connection to the server. Default is {}ms.", DEFAULT_CONNECTION_BACKOFF.as_millis())),
+            ("-r <number>", format!("Set the maximum number of attempts to connect to the server. The value of 0 means infinite attempts. Default is {DEFAULT_MAXIMUM_SERVER_CONNECTION_ATTEMPTS}.")),
+        ];
+        println!(
+            "{}",
+            format_args_list(&arguments, HELP_MESSAGE_BASIC_INDENT_WIDTH, HELP_MESSAGE_MAX_LINE_WIDTH)
+        );
     }
 }
 

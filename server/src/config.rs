@@ -1,4 +1,6 @@
-use check_mate_common::{constants::*, fetch_arg, fetch_arg_bool, CommandLineError};
+use check_mate_common::{
+    constants::*, fetch_arg, fetch_arg_bool, format_args_list, format_text, CommandLineError,
+};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Config {
@@ -57,16 +59,22 @@ impl Config {
     }
 
     pub fn print_help() {
-        let string = format!("Usage: check_mate_server [<args>]
+        let intro = "Usage: check_mate_server [<args>]";
+        println!("{}\n", format_text(intro, HELP_MESSAGE_MAX_LINE_WIDTH));
 
-Available args:
-    - p <port> - Set TCP port for the server. Default is {DEFAULT_PORT}.
-    - e <boolean> - Set whether the server should log every status received from clients or only
-                    when it changes. Default is {DEFAULT_LOG_EVERY_STATUS}.
-    - h - Print this message.
-    - v - Print version.
-");
-        println!("{}", string);
+        let arguments_intro = "Available args:";
+        println!("{}", format_text(arguments_intro, HELP_MESSAGE_MAX_LINE_WIDTH));
+
+        let arguments = [
+            ("-p <port>", format!("Set TCP port for the server. Default is {DEFAULT_PORT}.")),
+            ("-e <boolean>", format!("Set whether the server should log every status received from clients or only when it changes. Default is {DEFAULT_LOG_EVERY_STATUS}.")),
+            ("-h", "Print this message.".to_owned()),
+            ("-v", "Print version.".to_owned()),
+        ];
+        println!(
+            "{}",
+            format_args_list(&arguments, HELP_MESSAGE_BASIC_INDENT_WIDTH, HELP_MESSAGE_MAX_LINE_WIDTH)
+        );
     }
 }
 
@@ -76,7 +84,7 @@ impl Default for Config {
             server_port: DEFAULT_PORT,
             log_every_status: DEFAULT_LOG_EVERY_STATUS,
             help: false,
-            version : false,
+            version: false,
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use crate::action::{Action, WatchCommandData};
+use crate::action::{Action, WatchCommandData, WatchMode};
 use check_mate_common::{
     constants::*, fetch_arg, fetch_arg_and_parse, fetch_arg_bool, fetch_arg_string,
     format_args_list, format_text, CommandLineError,
@@ -158,6 +158,17 @@ impl Config {
                         },
                     )?;
                 }
+                "-m" => {
+                    let data = match self.action {
+                        Action::WatchCommand(ref mut data) => data,
+                        _ => return Err(CommandLineError::InvalidArgument(arg)),
+                    };
+                    data.mode = fetch_arg_and_parse(
+                        args,
+                        || CommandLineError::NoValueSpecified("watch mode".into(), arg.clone()),
+                        |value| CommandLineError::InvalidValue("watch mode".into(), value.into()),
+                    )?;
+                }
                 "-s" => {
                     let shell = match self.action {
                         Action::WatchCommand(ref mut data) => &mut data.shell,
@@ -213,7 +224,11 @@ impl Config {
         ];
         println!(
             "{}\n",
-            format_args_list(&actions, HELP_MESSAGE_BASIC_INDENT_WIDTH, HELP_MESSAGE_MAX_LINE_WIDTH)
+            format_args_list(
+                &actions,
+                HELP_MESSAGE_BASIC_INDENT_WIDTH,
+                HELP_MESSAGE_MAX_LINE_WIDTH
+            )
         );
 
         let arguments_intro = "
@@ -221,21 +236,35 @@ impl Config {
             action-specific and will not work with other actions. Arguments are specified after
             action. For watch action, an additional '--' separator is neccessary to divide the command
             arguments and CheckMate arguments. Available arguments:";
-        println!("{}", format_text(arguments_intro, HELP_MESSAGE_MAX_LINE_WIDTH));
+        println!(
+            "{}",
+            format_text(arguments_intro, HELP_MESSAGE_MAX_LINE_WIDTH)
+        );
 
+        let watch_modes_descriptions = [
+            " - OneLineError. Empty stdout means success. Non-empty stdout means error. The first non-empty line is an error message, the rest is ignored.",
+            " - MultiLineError. Empty stdout means success. Non-empty stdout means error. All non-empty lines are error message. Empty lines are ignored.",
+            " - ExitCode. Exit code equal to 0 means success. Exit code other than 0 means error. Error message is composed automatically to contain the exit code. The first non-empty in stdout line is an error message, the rest is ignored.",
+            " - OneLineErrorExitCode. Exit code equal to 0 means success. Exit code other than 0 means error. If there are no non-empty lines, error message is composed as for ExitCode."
+        ];
         let arguments = [
             ("-p <number>", format!("Set TCP port of the server to connect to. Default is {DEFAULT_PORT}.")),
             ("-n <string>", "Set name of this client. Name is optional, but makes it easier to identify clients and allows to refresh them by name.".to_owned()),
             ("-i <boolean>", format!("Only valid with read action. Set whether client names should be printed along with their statuses. Default is {DEFAULT_INCLUDE_NAMES}.", )),
             ("-w <milliseconds>", format!("Only valid with watch action. Set interval in milliseconds between invocation of the watched command. Default is {}ms.", DEFAULT_WATCH_INTERVAL.as_millis())),
             ("-d <milliseconds>", format!("Only valid with watch action. Set delay in milliseconds before the watched command is called for the first time. Default is {}ms.", DEFAULT_WATCH_DELAY.as_millis())),
+            ("-m <boolean>", format!("Only valid with watch action. Set watch mode, which represents how errors are detected and reported. Supported modes are listed below. Default is {}.\n{}", WatchMode::default(), watch_modes_descriptions.join("\n"))),
             ("-s <boolean>", format!("Only valid with watch action. Set whether the watched command should be invoked through default OS shell. Default is {DEFAULT_SHELL}.")),
             ("-c <milliseconds>", format!("Set backoff time to wait before retrying after unsuccessful connection to the server. Default is {}ms.", DEFAULT_CONNECTION_BACKOFF.as_millis())),
             ("-r <number>", format!("Set the maximum number of attempts to connect to the server. The value of 0 means infinite attempts. Default is {DEFAULT_MAXIMUM_SERVER_CONNECTION_ATTEMPTS}.")),
         ];
         println!(
             "{}",
-            format_args_list(&arguments, HELP_MESSAGE_BASIC_INDENT_WIDTH, HELP_MESSAGE_MAX_LINE_WIDTH)
+            format_args_list(
+                &arguments,
+                HELP_MESSAGE_BASIC_INDENT_WIDTH,
+                HELP_MESSAGE_MAX_LINE_WIDTH
+            )
         );
     }
 }
@@ -362,6 +391,48 @@ mod tests {
     }
 
     #[test]
+    fn watch_action_with_mode_argument_is_parsed() {
+        fn run(value: &str, mode: WatchMode) {
+            let args = ["watch", "echo", "a", "--", "-m", value];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let config = config.expect("Parsing should succeed");
+
+            let mut watch_command_data =
+                WatchCommandData::new("echo".to_string(), vec!["a".to_string()]);
+            watch_command_data.mode = mode;
+            let mut expected = Config::default();
+            expected.action = Action::WatchCommand(watch_command_data);
+            assert_eq!(config, expected);
+        }
+        run("OneLineError", WatchMode::OneLineError);
+        run("OneLineErROR", WatchMode::OneLineError);
+        run("MultiLineError", WatchMode::MultiLineError);
+        run("MultiLineErROR", WatchMode::MultiLineError);
+        run("ExitCode", WatchMode::ExitCode);
+        run("ExitCODE", WatchMode::ExitCode);
+        run("OneLineErrorExitCode", WatchMode::OneLineErrorExitCode);
+        run("OneLineErrorExitCODE", WatchMode::OneLineErrorExitCode);
+    }
+
+    #[test]
+    fn watch_action_with_invalid_mode_argument_should_fail() {
+        fn run(value: &str) {
+            let args = ["watch", "echo", "a", "--", "-m", value];
+            let config = Config::parse(to_owned_string_iter(&args));
+            let err = config.expect_err("Parsing should fail");
+            let expected = CommandLineError::InvalidValue("watch mode".into(), value.into());
+            assert_eq!(err, expected);
+        }
+        run("OneLineErro");
+        run("");
+        run("OneLineErrorrrrrrr");
+        run("1");
+        run("0");
+        run(".");
+        run("*");
+    }
+
+    #[test]
     fn watch_action_with_shell_argument_is_parsed() {
         fn run(value: &str, value_bool: bool) {
             let args = ["watch", "echo", "a", "--", "-s", value];
@@ -382,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    fn watch_action_with_shell_argument_should_fail() {
+    fn watch_action_with_invalid_shell_argument_should_fail() {
         fn run(value: &str) {
             let args = ["watch", "echo", "a", "--", "-s", value];
             let config = Config::parse(to_owned_string_iter(&args));

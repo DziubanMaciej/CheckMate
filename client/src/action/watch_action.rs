@@ -1,18 +1,8 @@
-use crate::config::Config;
-use check_mate_common::{constants::*, CommunicationError, ServerCommand};
+use super::definition::Action;
+use check_mate_common::constants::*;
+use check_mate_common::{CommunicationError, ServerCommand};
 use std::time::Duration;
 use tokio::io::{AsyncBufRead, AsyncWrite};
-
-#[derive(PartialEq, Debug)]
-pub enum Action {
-    ReadMessages(bool),
-    WatchCommand(WatchCommandData),
-    RefreshClientByName(String),
-    RefreshAllClients,
-    Abort,
-    Help,
-    Version,
-}
 
 #[derive(PartialEq, Debug)]
 pub struct WatchCommandData {
@@ -20,7 +10,7 @@ pub struct WatchCommandData {
     pub command_args: Vec<String>,
     pub interval: Duration,
     pub shell: bool,
-    pub delay : Duration
+    pub delay: Duration,
 }
 
 impl WatchCommandData {
@@ -30,62 +20,13 @@ impl WatchCommandData {
             command_args,
             interval: DEFAULT_WATCH_INTERVAL,
             shell: DEFAULT_SHELL,
-            delay : DEFAULT_WATCH_DELAY,
+            delay: DEFAULT_WATCH_DELAY,
         }
     }
 }
 
 impl Action {
-    pub fn should_reconnect(&self) -> bool {
-        matches!(self, Self::WatchCommand(_))
-    }
-
-    pub async fn execute(
-        &self,
-        input_stream: &mut (impl AsyncBufRead + Unpin),
-        output_stream: &mut (impl AsyncWrite + Unpin),
-        config: &Config,
-    ) -> Result<(), CommunicationError> {
-        if let Some(ref name) = config.client_name {
-            let command = ServerCommand::SetName(name.clone());
-            command.send_async(output_stream).await?;
-        }
-
-        match self {
-            Action::ReadMessages(include_names) => {
-                Self::read(input_stream, output_stream, *include_names).await
-            }
-            Action::WatchCommand(data) => Self::watch(input_stream, output_stream, data).await,
-            Action::RefreshClientByName(name) => {
-                Self::refresh_client_by_name(output_stream, name).await
-            }
-            Action::RefreshAllClients => Self::refresh_all_clients(output_stream).await,
-            Action::Abort => Self::abort(output_stream).await,
-            Action::Help => panic!("Cannot execute help action"),
-            Action::Version => panic!("Cannot execute version action"),
-        }
-    }
-
-    async fn read(
-        input_stream: &mut (impl AsyncBufRead + Unpin),
-        output_stream: &mut (impl AsyncWrite + Unpin),
-        include_names: bool,
-    ) -> Result<(), CommunicationError> {
-        let command = ServerCommand::GetStatuses(include_names);
-        command.send_async(output_stream).await?;
-
-        match ServerCommand::receive_async(input_stream).await? {
-            ServerCommand::Statuses(statuses) => {
-                for status in statuses.iter() {
-                    println!("{}", status);
-                }
-            }
-            _ => panic!("Unexpected command received after GetStatuses"),
-        }
-        Ok(())
-    }
-
-    async fn watch(
+    pub(crate) async fn watch(
         input_stream: &mut (impl AsyncBufRead + Unpin),
         output_stream: &mut (impl AsyncWrite + Unpin),
         data: &WatchCommandData,
@@ -136,28 +77,6 @@ impl Action {
             // Execute command
             do_watch(output_stream, data).await?;
         }
-    }
-
-    async fn refresh_client_by_name(
-        output_stream: &mut (impl AsyncWrite + Unpin),
-        name: &str,
-    ) -> Result<(), CommunicationError> {
-        let command = ServerCommand::RefreshClientByName(name.into());
-        command.send_async(output_stream).await
-    }
-
-    async fn refresh_all_clients(
-        output_stream: &mut (impl AsyncWrite + Unpin),
-    ) -> Result<(), CommunicationError> {
-        let command = ServerCommand::RefreshAllClients;
-        command.send_async(output_stream).await
-    }
-
-    async fn abort(
-        output_stream: &mut (impl AsyncWrite + Unpin),
-    ) -> Result<(), CommunicationError> {
-        let command = ServerCommand::Abort;
-        command.send_async(output_stream).await
     }
 
     async fn execute_command(command: &str, command_args: &Vec<String>, shell: bool) -> String {

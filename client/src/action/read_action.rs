@@ -13,8 +13,12 @@ impl Action {
 
         match ServerCommand::receive_async(input_stream).await? {
             ServerCommand::Statuses(statuses) => {
-                for status in statuses.iter() {
+                let mut iter = statuses.iter().peekable();
+                while let Some(status) = iter.next() {
                     println!("{}", status);
+                    if iter.peek().is_some() {
+                        println!();
+                    }
                 }
             }
             _ => panic!("Unexpected command received after GetStatuses"),

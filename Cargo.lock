@@ -48,7 +48,7 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "check_mate_client"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "check_mate_common",
  "tokio",
@@ -56,7 +56,7 @@ dependencies = [
 
 [[package]]
 name = "check_mate_common"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "textwrap",
  "tokio",
@@ -64,7 +64,7 @@ dependencies = [
 
 [[package]]
 name = "check_mate_server"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "check_mate_common",
  "tokio",
@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "check_mate_common",
 ]

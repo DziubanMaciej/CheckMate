@@ -37,4 +37,8 @@ rm -rf "$package_name" || exit 1
 printf "\n----------------------\n"
 echo "Zip archive created: $(realpath "$package_name.zip")"
 zip -sf "$package_name.zip"
-echo "SHA256: $(sha256sum $package_name.zip | cut -d' ' -f1)"
+checksum="$(sha256sum $package_name.zip | cut -d' ' -f1)"
+echo "SHA256: $checksum"
+
+# Update checksum in PKGBUILD (for Arch Linux)
+sed -i "s/sha256sums=('.*')/sha256sums=('$checksum')/g" ../PKGBUILD

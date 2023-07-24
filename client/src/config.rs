@@ -215,7 +215,7 @@ impl Config {
 
         let actions = [
             ("read", "Query error statuses from server".to_owned()),
-            ("watch <command>", "Periodically execute <command> and send its output as status to server. First non-empty line in stdout is considered as output and its considered as an error. Empty stdout is considered as a success status.".to_owned()),
+            ("watch <command>", "Periodically execute <command> and send its output as status to server.".to_owned()),
             ("refresh <name>", "Instruct the server to notify a client with a name equal to <name> to rerun its command immediately and update the status.".to_owned()),
             ("refresh_all", "Instruct the server to notify all its clients to rerun their commands immediately and update the statuses.".to_owned()),
             ("abort", "Instruct the server to end execution.".to_owned()),

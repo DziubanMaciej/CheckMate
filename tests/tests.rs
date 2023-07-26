@@ -138,6 +138,7 @@ fn read_messages_with_names_works() {
         .lines()
         .to_collection_counter()
         .contains("<Unknown>: error1", 1)
+        .contains("", 1)
         .contains("client2: error2", 1)
         .nothing_else();
 }
@@ -172,6 +173,7 @@ fn read_messages_with_multiple_clients_works() {
         .lines()
         .to_collection_counter()
         .contains("some nice error", 1)
+        .contains("", 1)
         .contains("some other error", 1)
         .nothing_else();
 }
@@ -252,8 +254,7 @@ fn refreshing_all_works() {
     client_refresher.wait_and_get_output(true);
     std::thread::sleep(std::time::Duration::from_millis(50));
 
-    // Server should see only one report from Watcher1, but two reports from Watcher2, since
-    // it has been explicitly refreshed.
+    // Server should see only two reports from both watchers, since all watchers were refreshed.
     _client_watcher1.kill_and_get_output();
     _client_watcher2.kill_and_get_output();
     let server_out = server.kill_and_get_output();

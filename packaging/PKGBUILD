@@ -1,6 +1,6 @@
 # Maintainer: Maciej Dziuban <dziuban.maciej@gmail.com>
 pkgname=check_mate-bin
-pkgver=0.3.0
+pkgver=0.4.0
 pkgrel=1
 pkgdesc="Utility program to monitor output of certain commands"
 arch=('x86_64')

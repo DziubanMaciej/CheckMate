@@ -13,6 +13,7 @@ pub enum ProcessCommandResult {
     GetStatuses(bool),
     RefreshClientByName(String),
     RefreshAllClients,
+    ListClients,
 }
 
 impl ClientState {
@@ -86,12 +87,14 @@ impl ClientState {
                 return ProcessCommandResult::RefreshClientByName(name)
             }
             ServerCommand::RefreshAllClients => return ProcessCommandResult::RefreshAllClients,
+            ServerCommand::ListClients => return ProcessCommandResult::ListClients,
             ServerCommand::SetName(name) => {
                 println!("Name set to {}", name);
                 self.name = Some(name);
             }
             ServerCommand::Statuses(_) => panic!("Unexpected server command"),
             ServerCommand::Refresh => panic!("Unexpected server command"),
+            ServerCommand::Clients(_) => panic!("Unexpected server command"),
         };
 
         ProcessCommandResult::Ok

@@ -36,6 +36,8 @@ pub enum TaskMessage {
     ReadMessageResponse(Result<(), String>, String),
     RefreshByName(String),
     RefreshAll,
+    ListClientsRequest(Sender<TaskMessage>),
+    ListClientsResponse(String),
     // Abort,
 }
 
@@ -87,6 +89,13 @@ impl TaskCommunication {
                     .push_command_to_send(ServerCommand::Refresh)
                     .await;
             }
+            TaskMessage::ListClientsRequest(sender) => {
+                let message = TaskMessage::ListClientsResponse(
+                    client_state.get_name_or_default(),
+                );
+                Self::unicast(sender, message).await;
+            }
+            TaskMessage::ListClientsResponse(_) => panic!("Unexpected task message"),
         }
     }
 
@@ -134,6 +143,36 @@ impl TaskCommunication {
                         }
                         Some(status_string)
                     }
+                },
+                _ => panic!("Unexpected message received"),
+            })
+            .collect()
+    }
+
+    pub async fn list_clients(
+        &self,
+        task_id: usize,
+        receiver: &mut Receiver<TaskMessage>,
+        sender: &Sender<TaskMessage>,
+    ) -> Vec<String> {
+        let mut data = self.get_locked_data_snapshot().await;
+
+        // Broadcast message to all other task and collect their responses
+        // in a vector. The vector could be smaller than our task list, since
+        // some of them might have ended in the meantime. This is not a problem,
+        // we just ignore all send/receive errors.
+        Self::broadcast(
+            task_id,
+            &data,
+            TaskMessage::ListClientsRequest(sender.clone()),
+        ).await;
+
+        Self::collect(task_id, &mut data, receiver)
+            .await
+            .into_iter()
+            .filter_map(|message| match message {
+                TaskMessage::ListClientsResponse(name) => {
+                    Some(name)
                 },
                 _ => panic!("Unexpected message received"),
             })

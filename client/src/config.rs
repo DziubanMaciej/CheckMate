@@ -49,6 +49,7 @@ impl Config {
                 Action::RefreshClientByName(name)
             }
             "refresh_all" => Action::RefreshAllClients,
+            "list" => Action::ListClients,
             "abort" => Action::Abort,
             "help" | "-h" => Action::Help,
             "version" | "-v" => Action::Version,
@@ -218,6 +219,7 @@ impl Config {
             ("watch <command>", "Periodically execute <command> and send its output as status to server.".to_owned()),
             ("refresh <name>", "Instruct the server to notify a client with a name equal to <name> to rerun its command immediately and update the status.".to_owned()),
             ("refresh_all", "Instruct the server to notify all its clients to rerun their commands immediately and update the statuses.".to_owned()),
+            ("list", "List all existing clients connected to the server.".to_owned()),
             ("abort", "Instruct the server to end execution.".to_owned()),
             ("help", "Print this message.".to_owned()),
             ("version", "Print version.".to_owned()),
@@ -486,6 +488,17 @@ mod tests {
 
         let mut expected = Config::default();
         expected.action = Action::RefreshAllClients;
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn list_clients_action_is_parsed() {
+        let args = ["list"];
+        let config = Config::parse(to_owned_string_iter(&args));
+        let config = config.expect("Parsing should succeed");
+
+        let mut expected = Config::default();
+        expected.action = Action::ListClients;
         assert_eq!(config, expected);
     }
 

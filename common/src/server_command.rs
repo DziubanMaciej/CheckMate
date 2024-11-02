@@ -10,11 +10,13 @@ pub enum ServerCommand {
     GetStatuses(bool),
     RefreshClientByName(String),
     RefreshAllClients,
+    ListClients,
     SetName(String),
 
     // Sent by server
     Statuses(Vec<String>),
     Refresh,
+    Clients(Vec<String>),
 }
 
 #[derive(Debug, PartialEq)]
@@ -47,6 +49,8 @@ impl ServerCommand {
     pub(crate) const ID_SET_NAME: u8 = 7;
     pub(crate) const ID_STATUSES: u8 = 8;
     pub(crate) const ID_REFRESH: u8 = 9;
+    pub(crate) const ID_LIST_CLIENTS: u8 = 10;
+    pub(crate) const ID_CLIENTS: u8 = 11;
 
     pub fn from_bytes(bytes: &[u8]) -> Result<ServerCommandParse, ServerCommandError> {
         let mut bytes_used = 0;
@@ -105,6 +109,10 @@ impl ServerCommand {
             ServerCommand::ID_SET_NAME => ServerCommand::SetName(take_string(&mut bytes_used)?),
             ServerCommand::ID_STATUSES => ServerCommand::Statuses(take_strings(&mut bytes_used)?),
             ServerCommand::ID_REFRESH => ServerCommand::Refresh,
+            ServerCommand::ID_LIST_CLIENTS => ServerCommand::ListClients,
+            ServerCommand::ID_CLIENTS => {
+                ServerCommand::Clients(take_strings(&mut bytes_used)?)
+            }
             _ => return Err(ServerCommandError::UnknownCommand),
         };
         Ok(ServerCommandParse {
@@ -150,6 +158,7 @@ impl ServerCommand {
                 result
             }
             ServerCommand::RefreshAllClients => vec![ServerCommand::ID_REFRESH_ALL_CLIENTS],
+            ServerCommand::ListClients => vec![ServerCommand::ID_LIST_CLIENTS],
             ServerCommand::SetName(name) => {
                 let mut result = vec![ServerCommand::ID_SET_NAME];
                 append_string(&mut result, name);
@@ -161,6 +170,11 @@ impl ServerCommand {
                 result
             }
             ServerCommand::Refresh => vec![ServerCommand::ID_REFRESH],
+            ServerCommand::Clients(clients) => {
+                let mut result = vec![ServerCommand::ID_CLIENTS];
+                append_strings(&mut result, clients);
+                result
+            }
         }
     }
 }
@@ -224,6 +238,15 @@ mod tests {
     #[test]
     fn command_refresh_all_is_serialized() {
         let command = ServerCommand::RefreshAllClients;
+        let bytes = command.to_bytes();
+        let parse_result = ServerCommand::from_bytes(&bytes).expect("Command should deserialize");
+        assert_eq!(parse_result.command, command);
+        assert_eq!(parse_result.bytes_used, 1);
+    }
+
+    #[test]
+    fn command_list_clients_is_serialized() {
+        let command = ServerCommand::ListClients;
         let bytes = command.to_bytes();
         let parse_result = ServerCommand::from_bytes(&bytes).expect("Command should deserialize");
         assert_eq!(parse_result.command, command);

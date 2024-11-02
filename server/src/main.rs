@@ -38,6 +38,14 @@ async fn execute_command_from_client(
         client_state::ProcessCommandResult::RefreshAllClients => {
             task_communication.refresh_all_clients(task_id).await;
         }
+        client_state::ProcessCommandResult::ListClients => {
+            let clients = task_communication
+                .list_clients(task_id, receiver, sender)
+                .await;
+            client_state
+                .push_command_to_send(ServerCommand::Clients(clients))
+                .await;
+        }
     }
 }
 

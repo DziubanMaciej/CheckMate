@@ -9,6 +9,7 @@ pub enum Action {
     WatchCommand(WatchCommandData),
     RefreshClientByName(String),
     RefreshAllClients,
+    ListClients,
     Abort,
     Help,
     Version,
@@ -39,6 +40,7 @@ impl Action {
                 Self::refresh_client_by_name(output_stream, name).await
             }
             Action::RefreshAllClients => Self::refresh_all_clients(output_stream).await,
+            Action::ListClients => Self::list_clients(input_stream, output_stream).await,
             Action::Abort => Self::abort(output_stream).await,
             Action::Help => panic!("Cannot execute help action"),
             Action::Version => panic!("Cannot execute version action"),
